@@ -9,6 +9,7 @@ import 'package:hhaip_shell/services/log_text.dart';
 import 'package:hhaip_shell/services/monitor_service.dart';
 import 'package:hhaip_shell/services/remote_path.dart';
 import 'package:hhaip_shell/ui/quick_connect.dart';
+import 'package:hhaip_shell/ui/terminal_selection.dart';
 
 int _passed = 0;
 int _failed = 0;
@@ -26,7 +27,11 @@ void check(String label, Object? actual, Object? expected) {
 
 void main() {
   print('RemotePath');
-  check('normalize 折叠 . 与 ..', RemotePath.normalize('/var/./log/../tmp'), '/var/tmp');
+  check(
+    'normalize 折叠 . 与 ..',
+    RemotePath.normalize('/var/./log/../tmp'),
+    '/var/tmp',
+  );
   check('normalize 合并斜杠', RemotePath.normalize('a//b///c'), 'a/b/c');
   check('normalize 根目录', RemotePath.normalize('/'), '/');
   check('normalize 越界不回溯', RemotePath.normalize('/../etc'), '/etc');
@@ -63,7 +68,11 @@ void main() {
   check('序列化往返端口', restored.port, 2222);
   check('序列化往返认证方式', restored.authType, SshAuthType.privateKey);
   check('address', restored.address, 'deploy@10.0.0.2:2222');
-  check('displayName 回退', SshConnection(host: 'a.com', username: 'ops').displayName, 'ops@a.com');
+  check(
+    'displayName 回退',
+    SshConnection(host: 'a.com', username: 'ops').displayName,
+    'ops@a.com',
+  );
 
   print('传输任务进度');
   final task = TransferTask(
@@ -151,7 +160,8 @@ cpu  200 0 200 800 100 0 0 0 0 0
   check('CPU 使用率', second.cpuPercent?.toStringAsFixed(1), '66.7');
 
   final stats = MonitorService.parseDockerStats(
-      'web|12.34%|100 MiB / 2 GiB|4.88%|1.2 MB / 3.4 MB');
+    'web|12.34%|100 MiB / 2 GiB|4.88%|1.2 MB / 3.4 MB',
+  );
   check('容器统计名称', stats.keys.first, 'web');
   check('容器统计 CPU', stats['web']?.cpuPercent?.toStringAsFixed(2), '12.34');
   check('容器统计内存', stats['web']?.memUsage, '100 MiB / 2 GiB');
@@ -184,7 +194,12 @@ cpu  200 0 200 800 100 0 0 0 0 0
   check('默认是内置不可删', defaults.isBuiltinCategory('默认'), true);
   check('自定义可删', withCustom.isBuiltinCategory('灰度环境'), false);
 
-  print('日志行处理（不截断、不改写内容）');  check('保留 ANSI 颜色码', sanitizeLogChunk('\x1B[31mError\x1B[0m'), '\x1B[31mError\x1B[0m');
+  print('日志行处理（不截断、不改写内容）');
+  check(
+    '保留 ANSI 颜色码',
+    sanitizeLogChunk('\x1B[31mError\x1B[0m'),
+    '\x1B[31mError\x1B[0m',
+  );
   check('保留制表符', sanitizeLogChunk('a\tb'), 'a\tb');
   check('保留换行', sanitizeLogChunk('a\nb'), 'a\nb');
   check('保留回车', sanitizeLogChunk('a\rb'), 'a\rb');
@@ -194,6 +209,224 @@ cpu  200 0 200 800 100 0 0 0 0 0
   check('超长行完整保留', sanitizeLogChunk(huge).length, huge.length);
   check('普通行原样', sanitizeLogChunk('hello 世界'), 'hello 世界');
   check('行数统计', countLogLines('a\nb\nc'), 2);
+
+  print('终端选区自动滚动');
+  // 几何约定：内容区 8..500，感应区厚度 40（即 8..48 与 460..500 是感应区）
+  const top = 8.0, bottom = 500.0, edge = 40.0;
+  check(
+    '界外上方向上滚',
+    selectionScrollDirection(
+      pointerY: -100,
+      contentTop: top,
+      contentBottom: bottom,
+      edgePixels: edge,
+    ),
+    -1,
+  );
+  check(
+    '界内贴上边向上滚',
+    selectionScrollDirection(
+      pointerY: 40,
+      contentTop: top,
+      contentBottom: bottom,
+      edgePixels: edge,
+    ),
+    -1,
+  );
+  check(
+    '感应区外不滚',
+    selectionScrollDirection(
+      pointerY: 50,
+      contentTop: top,
+      contentBottom: bottom,
+      edgePixels: edge,
+    ),
+    0,
+  );
+  check(
+    '中间不滚',
+    selectionScrollDirection(
+      pointerY: 250,
+      contentTop: top,
+      contentBottom: bottom,
+      edgePixels: edge,
+    ),
+    0,
+  );
+  check(
+    '界内贴下边向下滚',
+    selectionScrollDirection(
+      pointerY: 470,
+      contentTop: top,
+      contentBottom: bottom,
+      edgePixels: edge,
+    ),
+    1,
+  );
+  check(
+    '界外下方向下滚',
+    selectionScrollDirection(
+      pointerY: 900,
+      contentTop: top,
+      contentBottom: bottom,
+      edgePixels: edge,
+    ),
+    1,
+  );
+  check(
+    '感应区厚度为 0 时界内不滚',
+    selectionScrollDirection(
+      pointerY: 250,
+      contentTop: top,
+      contentBottom: bottom,
+      edgePixels: 0,
+    ),
+    0,
+  );
+  check(
+    '感应区厚度为 0 时出界仍会滚',
+    selectionScrollDirection(
+      pointerY: -100,
+      contentTop: top,
+      contentBottom: bottom,
+      edgePixels: 0,
+    ),
+    -1,
+  );
+
+  // 浮点运算带尾差，速度系数统一按三位小数比对
+  String speed(double pointerY) => selectionScrollSpeedFactor(
+    pointerY: pointerY,
+    contentTop: top,
+    contentBottom: bottom,
+    edgePixels: edge,
+  ).toStringAsFixed(3);
+
+  check('贴边最慢（0.35 封顶）', speed(top), '0.350');
+  check('感应区内缘速度归零', speed(top + edge), '0.000');
+  check('刚出界略加速', speed(top - edge * 0.1), '0.450');
+  check('出界一个感应区宽度后到顶速', speed(top - edge), '1.000');
+  check('出界很远仍是顶速', speed(top - edge * 50), '1.000');
+
+  // 行换算：行高 20，顶部留白 8，安全区 0
+  const cellH = 20.0, padT = 8.0, safeT = 0.0;
+  check(
+    '未滚动时指向第一行',
+    selectionRowFor(
+      localY: 8,
+      cellHeight: cellH,
+      paddingTop: padT,
+      safeAreaTop: safeT,
+      scrollOffset: 0,
+      bufferLines: 24,
+    ),
+    0,
+  );
+  check(
+    '往下两行是第 1 行',
+    selectionRowFor(
+      localY: 28,
+      cellHeight: cellH,
+      paddingTop: padT,
+      safeAreaTop: safeT,
+      scrollOffset: 0,
+      bufferLines: 24,
+    ),
+    1,
+  );
+  check(
+    '滚动 200px 后同一位置是第 10 行',
+    selectionRowFor(
+      localY: 8,
+      cellHeight: cellH,
+      paddingTop: padT,
+      safeAreaTop: safeT,
+      scrollOffset: 200,
+      bufferLines: 24,
+    ),
+    10,
+  );
+  check(
+    '行号钳制到缓冲区末行',
+    selectionRowFor(
+      localY: 8,
+      cellHeight: cellH,
+      paddingTop: padT,
+      safeAreaTop: safeT,
+      scrollOffset: 1000,
+      bufferLines: 24,
+    ),
+    23,
+  );
+  check(
+    '指针出上界不产生负行号',
+    selectionRowFor(
+      localY: 0,
+      cellHeight: cellH,
+      paddingTop: padT,
+      safeAreaTop: safeT,
+      scrollOffset: 0,
+      bufferLines: 24,
+    ),
+    0,
+  );
+  // 安全区非零（触屏设备场景）时同样要扣掉
+  check(
+    '安全区被扣掉',
+    selectionRowFor(
+      localY: 33,
+      cellHeight: cellH,
+      paddingTop: padT,
+      safeAreaTop: 5,
+      scrollOffset: 0,
+      bufferLines: 24,
+    ),
+    1,
+  );
+
+  // 列换算：列宽 10，左边留白 10，终端 80 列
+  const cellW = 10.0, padL = 10.0;
+  check(
+    '未滚动时指向第一列',
+    selectionColumnFor(
+      localX: 10,
+      cellWidth: cellW,
+      paddingLeft: padL,
+      safeAreaLeft: 0,
+      viewColumns: 80,
+    ),
+    0,
+  );
+  check(
+    '中段列号正确',
+    selectionColumnFor(
+      localX: 105,
+      cellWidth: cellW,
+      paddingLeft: padL,
+      safeAreaLeft: 0,
+      viewColumns: 80,
+    ),
+    9,
+  );
+  check(
+    '列号钳制到最后一列',
+    selectionColumnFor(
+      localX: 1000,
+      cellWidth: cellW,
+      paddingLeft: padL,
+      safeAreaLeft: 0,
+      viewColumns: 80,
+    ),
+    79,
+  );
+
+  check('向右拖时多含一个单元格', selectionExtentColumn(fromColumn: 3, toColumn: 5), 6);
+  check('向左拖不多含', selectionExtentColumn(fromColumn: 5, toColumn: 3), 3);
+  check(
+    '同一列也多含（保证至少选中一格）',
+    selectionExtentColumn(fromColumn: 4, toColumn: 4),
+    5,
+  );
 
   print('\n通过 $_passed 项，失败 $_failed 项');
   if (_failed > 0) {

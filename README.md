@@ -148,7 +148,7 @@ flutter pub get
 # Development run (hot reload)
 flutter run -d macos
 
-# Pure-Dart self-check (59 assertions, no GUI required)
+# Pure-Dart self-check (84 assertions, no GUI required)
 dart run tool/verify.dart
 
 # Static analysis
@@ -271,7 +271,7 @@ lib/
     ├── theme.dart               # Colours / theme / terminal palette
     └── widgets/common.dart      # Shared widgets and dialogs
 tool/
-├── verify.dart                  # Pure-Dart self-check (59 assertions), CI-friendly
+├── verify.dart                  # Pure-Dart self-check (84 assertions), CI-friendly
 ├── build_release.sh             # Standard release build (strip symbols + inspect bundle)
 ├── publish_github.sh            # Publish to GitHub Releases (push + release + upload asset)
 ├── push_github_api.py           # Mirror git history to GitHub over the REST API (no git push)
@@ -327,7 +327,7 @@ Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 Please make sure these pass before submitting:
 
 ```bash
-dart run tool/verify.dart   # all 59 assertions green
+dart run tool/verify.dart   # all 84 assertions green
 flutter analyze             # no warnings or above
 ```
 

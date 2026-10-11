@@ -133,7 +133,7 @@ flutter pub get
 # 开发运行（热重载）
 flutter run -d macos
 
-# 纯 Dart 逻辑自检（59 项，无需 GUI 环境）
+# 纯 Dart 逻辑自检（84 项，无需 GUI 环境）
 dart run tool/verify.dart
 
 # 静态检查
@@ -251,7 +251,7 @@ lib/
     ├── theme.dart               # 配色 / 主题 / 终端配色
     └── widgets/common.dart      # 通用小组件与弹窗
 tool/
-├── verify.dart                  # 纯 Dart 自检（59 项），CI 可直接跑
+├── verify.dart                  # 纯 Dart 自检（84 项），CI 可直接跑
 ├── build_release.sh             # 标准发布打包（剥符号 + 产物体检）
 ├── publish_github.sh            # 发布到 GitHub Releases（推代码 + 建版本 + 传附件）
 ├── push_github_api.py           # 用 REST API 把 git 历史镜像到 GitHub（git 协议不通时用）
@@ -300,7 +300,7 @@ tool/
 提交前请确保：
 
 ```bash
-dart run tool/verify.dart   # 59 项自检全绿
+dart run tool/verify.dart   # 84 项自检全绿
 flutter analyze             # 无 warning 及以上
 ```
 

@@ -31,7 +31,7 @@ flutter run -d macos
 
 ```bash
 flutter run -d macos          # 开发运行（热重载）
-dart run tool/verify.dart     # 纯 Dart 自检（59 项，不需要 GUI）
+dart run tool/verify.dart     # 纯 Dart 自检（84 项，不需要 GUI）
 flutter analyze               # 静态检查
 flutter test                  # Widget 测试（部分沙盒环境可能起不了 flutter_tester）
 tool/build_release.sh         # 发布打包：剥符号 + 产物体检
