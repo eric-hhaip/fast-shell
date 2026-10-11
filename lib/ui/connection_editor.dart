@@ -56,14 +56,6 @@ class _ConnectionEditorDialogState extends State<ConnectionEditorDialog> {
   /// 内置分类：不可删除（与 AppSettings.defaultCategories 同一来源）
   static const _builtinCategories = AppSettings.defaultCategories;
 
-  /// 单行输入框的统一高度：isDense + contentPadding 上下各 10 +
-  /// 正文行高（13 × 1.45 ≈ 19）+ 上下边框各 1。
-  /// 「连接名称」的 TextField 与「分类」的自绘下拉框共用这一个常量，
-  /// 保证两框严格等高——不要用 IntrinsicHeight + stretch 让两边互相撑齐：
-  /// TextField 的 intrinsic 高度与实际布局高度有偏差，实测下拉框会被压矮、
-  /// 文字溢出被裁。
-  static const double _fieldHeight = 41.0;
-
   late final TextEditingController _name;
   late final TextEditingController _group;
   late final TextEditingController _host;
@@ -209,8 +201,11 @@ class _ConnectionEditorDialogState extends State<ConnectionEditorDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 「连接名称 / 分类」一行：两边高度统一来自 _fieldHeight（见其注释），
-              // 不再依赖 IntrinsicHeight + stretch 互相撑齐。
+              // 「连接名称 / 分类」一行：两框高度走同一条渲染路径——
+              // 分类下拉的可见部分也用 InputDecorator（与 TextField 同款外壳、
+              // 同一主题），高度由同一公式产生，天然等高。
+              // 不要让两边各自硬编码或互相撑齐：TextField 的 intrinsic 高度
+              // 与实际布局高度有偏差，装饰的 constraints 也钳不住它，都试过、不等高。
               Row(
                 children: [
                   Expanded(
@@ -519,112 +514,100 @@ class _ConnectionEditorDialogState extends State<ConnectionEditorDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const FieldLabel(text: '分类'),
-        // 高度与「连接名称」输入框严格一致（_fieldHeight），不再用 Expanded
-        // 依赖外层 IntrinsicHeight 撑齐——那条路的 intrinsic 计算有偏差，
-        // 实测下拉框比输入框矮、文字溢出被裁。
-        SizedBox(
-          height: _fieldHeight,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                // LayoutBuilder 取字段实际宽度，让弹出菜单与字段等宽
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    return PopupMenuButton<String>(
-                      key: _menuKey,
-                      constraints: BoxConstraints.tightFor(
-                        width: constraints.maxWidth,
-                      ),
-                      initialValue: value,
-                      position: PopupMenuPosition.under,
-                      offset: const Offset(0, 4),
-                      color: Colors.white,
-                      elevation: 8,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        side: const BorderSide(color: AppColors.borderSoft),
-                      ),
-                      onSelected: (next) => setState(() => _group.text = next),
-                      // menuContext 指向菜单所在的 Overlay 路由，仅用于关闭菜单本身
-                      itemBuilder: (menuContext) => [
-                        for (final name in _categories)
-                          PopupMenuItem(
-                            value: name,
-                            height: 34,
-                            padding: const EdgeInsets.only(left: 12, right: 4),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(name, style: AppText.body),
-                                ),
-                                // 「默认」是内置分类，不给删除入口
-                                if (!_builtinCategories.contains(name))
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.delete_outline,
-                                      size: 15,
-                                    ),
-                                    color: AppColors.textTertiary,
-                                    tooltip: '删除分类',
-                                    splashRadius: 14,
-                                    visualDensity: VisualDensity.compact,
-                                    constraints: const BoxConstraints(
-                                      minWidth: 26,
-                                      minHeight: 26,
-                                    ),
-                                    padding: EdgeInsets.zero,
-                                    // 子按钮自己吃掉点击，不会触发选中
-                                    onPressed: () {
-                                      // 菜单项是在「打开菜单那一刻」一次性构建的，
-                                      // 之后对编辑器 setState 不会重建这层已打开的路由，
-                                      // 删掉的项会一直挂在菜单里 —— 所以先关掉菜单，
-                                      // 删完再把它重新弹出来（见 _deleteCategory）。
-                                      Navigator.of(menuContext).pop();
-                                      unawaited(_deleteCategory(name));
-                                    },
+        // 可见部分用 InputDecorator（空 InputDecoration 即走全局主题），
+        // 与 _field 里的 TextField 用完全相同的外壳：isDense、filled、
+        // contentPadding、圆角边框全部一致，高度必然相同。
+        Row(
+          children: [
+            Expanded(
+              // LayoutBuilder 取字段实际宽度，让弹出菜单与字段等宽
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return PopupMenuButton<String>(
+                    key: _menuKey,
+                    constraints: BoxConstraints.tightFor(
+                      width: constraints.maxWidth,
+                    ),
+                    initialValue: value,
+                    position: PopupMenuPosition.under,
+                    offset: const Offset(0, 4),
+                    color: Colors.white,
+                    elevation: 8,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: const BorderSide(color: AppColors.borderSoft),
+                    ),
+                    onSelected: (next) => setState(() => _group.text = next),
+                    // menuContext 指向菜单所在的 Overlay 路由，仅用于关闭菜单本身
+                    itemBuilder: (menuContext) => [
+                      for (final name in _categories)
+                        PopupMenuItem(
+                          value: name,
+                          height: 34,
+                          padding: const EdgeInsets.only(left: 12, right: 4),
+                          child: Row(
+                            children: [
+                              Expanded(child: Text(name, style: AppText.body)),
+                              // 「默认」是内置分类，不给删除入口
+                              if (!_builtinCategories.contains(name))
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    size: 15,
                                   ),
-                              ],
-                            ),
+                                  color: AppColors.textTertiary,
+                                  tooltip: '删除分类',
+                                  splashRadius: 14,
+                                  visualDensity: VisualDensity.compact,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 26,
+                                    minHeight: 26,
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  // 子按钮自己吃掉点击，不会触发选中
+                                  onPressed: () {
+                                    // 菜单项是在「打开菜单那一刻」一次性构建的，
+                                    // 之后对编辑器 setState 不会重建这层已打开的路由，
+                                    // 删掉的项会一直挂在菜单里 —— 所以先关掉菜单，
+                                    // 删完再把它重新弹出来（见 _deleteCategory）。
+                                    Navigator.of(menuContext).pop();
+                                    unawaited(_deleteCategory(name));
+                                  },
+                                ),
+                            ],
                           ),
-                      ],
-                      child: Container(
-                        // 有 alignment 时 Container 会撑满约束高度（41），
-                        // 文本在其中垂直居中——不要用上下 padding 撑高度，
-                        // 约束一旦比 padding+行高紧，文字就会溢出被裁。
-                        alignment: Alignment.centerLeft,
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        decoration: BoxDecoration(
-                          color: AppColors.canvas,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppColors.border),
                         ),
-                        child: Row(
-                          children: [
-                            Expanded(child: Text(value, style: AppText.body)),
-                            const Icon(
-                              Icons.keyboard_arrow_down,
-                              size: 16,
-                              color: AppColors.textTertiary,
-                            ),
-                          ],
-                        ),
+                    ],
+                    child: InputDecorator(
+                      // 空 InputDecoration = 全走全局主题（isDense、filled、
+                      // contentPadding、圆角边框），与 TextField 同款外壳，
+                      // 高度由同一公式产生，两框必然等高。
+                      decoration: const InputDecoration(),
+                      child: Row(
+                        children: [
+                          Expanded(child: Text(value, style: AppText.body)),
+                          const Icon(
+                            Icons.keyboard_arrow_down,
+                            size: 16,
+                            color: AppColors.textTertiary,
+                          ),
+                        ],
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
               ),
-              const SizedBox(width: 8),
-              Center(
-                child: AppIconButton(
-                  icon: Icons.add,
-                  tooltip: '新增分类',
-                  size: 34,
-                  onPressed: _addCategory,
-                ),
+            ),
+            const SizedBox(width: 8),
+            Center(
+              child: AppIconButton(
+                icon: Icons.add,
+                tooltip: '新增分类',
+                size: 34,
+                onPressed: _addCategory,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ],
     );
@@ -699,10 +682,6 @@ class _ConnectionEditorDialogState extends State<ConnectionEditorDialog> {
           style: AppText.body,
           decoration: InputDecoration(
             hintText: hintText,
-            // 强制所有单行输入框统一为 _fieldHeight，与「分类」下拉框等高
-            //（InputDecorator 自身算出的高度和 intrinsic 有偏差，不锁定的话
-            //  相邻自绘字段对不齐）。
-            constraints: BoxConstraints.tightFor(height: _fieldHeight),
             suffixIcon: suffix,
             suffixIconConstraints: const BoxConstraints(
               minWidth: 38,
