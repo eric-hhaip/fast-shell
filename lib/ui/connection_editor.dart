@@ -56,6 +56,14 @@ class _ConnectionEditorDialogState extends State<ConnectionEditorDialog> {
   /// 内置分类：不可删除（与 AppSettings.defaultCategories 同一来源）
   static const _builtinCategories = AppSettings.defaultCategories;
 
+  /// 单行输入框的统一高度：isDense + contentPadding 上下各 10 +
+  /// 正文行高（13 × 1.45 ≈ 19）+ 上下边框各 1。
+  /// 「连接名称」的 TextField 与「分类」的自绘下拉框共用这一个常量，
+  /// 保证两框严格等高——不要用 IntrinsicHeight + stretch 让两边互相撑齐：
+  /// TextField 的 intrinsic 高度与实际布局高度有偏差，实测下拉框会被压矮、
+  /// 文字溢出被裁。
+  static const double _fieldHeight = 41.0;
+
   late final TextEditingController _name;
   late final TextEditingController _group;
   late final TextEditingController _host;
@@ -201,26 +209,22 @@ class _ConnectionEditorDialogState extends State<ConnectionEditorDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // IntrinsicHeight + stretch：让「分类」框与「连接名称」输入框强制同高。
-              // 两边高度来源不同（TextField 走 InputDecorator，分类是自绘容器），
-              // 与其各自硬编码高度，不如让矮的一边直接撑齐。
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: _field(
-                        label: '连接名称',
-                        hint: '(可选)',
-                        controller: _name,
-                        hintText: '例如：生产环境 Web',
-                      ),
+              // 「连接名称 / 分类」一行：两边高度统一来自 _fieldHeight（见其注释），
+              // 不再依赖 IntrinsicHeight + stretch 互相撑齐。
+              Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: _field(
+                      label: '连接名称',
+                      hint: '(可选)',
+                      controller: _name,
+                      hintText: '例如：生产环境 Web',
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(flex: 2, child: _categoryField()),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(flex: 2, child: _categoryField()),
+                ],
               ),
               const SizedBox(height: 14),
               Row(
@@ -515,9 +519,11 @@ class _ConnectionEditorDialogState extends State<ConnectionEditorDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const FieldLabel(text: '分类'),
-        // 外层 Row 用了 IntrinsicHeight + stretch（见 build 里「连接名称 / 分类」一行），
-        // 这里必须撑满剩余高度，下拉框才能和「连接名称」输入框一样高。
-        Expanded(
+        // 高度与「连接名称」输入框严格一致（_fieldHeight），不再用 Expanded
+        // 依赖外层 IntrinsicHeight 撑齐——那条路的 intrinsic 计算有偏差，
+        // 实测下拉框比输入框矮、文字溢出被裁。
+        SizedBox(
+          height: _fieldHeight,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -583,10 +589,11 @@ class _ConnectionEditorDialogState extends State<ConnectionEditorDialog> {
                           ),
                       ],
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 10,
-                        ),
+                        // 有 alignment 时 Container 会撑满约束高度（41），
+                        // 文本在其中垂直居中——不要用上下 padding 撑高度，
+                        // 约束一旦比 padding+行高紧，文字就会溢出被裁。
+                        alignment: Alignment.centerLeft,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
                         decoration: BoxDecoration(
                           color: AppColors.canvas,
                           borderRadius: BorderRadius.circular(8),
@@ -692,6 +699,10 @@ class _ConnectionEditorDialogState extends State<ConnectionEditorDialog> {
           style: AppText.body,
           decoration: InputDecoration(
             hintText: hintText,
+            // 强制所有单行输入框统一为 _fieldHeight，与「分类」下拉框等高
+            //（InputDecorator 自身算出的高度和 intrinsic 有偏差，不锁定的话
+            //  相邻自绘字段对不齐）。
+            constraints: BoxConstraints.tightFor(height: _fieldHeight),
             suffixIcon: suffix,
             suffixIconConstraints: const BoxConstraints(
               minWidth: 38,
