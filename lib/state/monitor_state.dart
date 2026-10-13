@@ -224,9 +224,10 @@ class MonitorState {
 
   // ------------------------------------------------------------- 日志
 
-  /// 写入一行日志到终端缓冲（超过 [logScrollback] 行时由 xterm 丢弃最旧的行）
+  /// 写入一行日志到终端缓冲（超过 [logScrollback] 行时由 xterm 丢弃最旧的行）。
+  /// 写入前按日志级别着色：级别词/时间戳上色，正文保持默认色。
   void appendLogLine(String line) {
-    logTerminal.write('${sanitizeLogChunk(line)}\r\n');
+    logTerminal.write('${colorizeLogLine(sanitizeLogChunk(line))}\r\n');
     logLineCount++;
   }
 
@@ -260,12 +261,9 @@ class MonitorState {
       // 原样写入，不截断：长行由 xterm 自动折行到回滚缓冲里
       final text = sanitizeLogChunk(output);
       if (text.isNotEmpty) {
-        // 终端里裸 \n 只换行、不回列，行首会停在上行结束的列上（阶梯缩进）。
-        // 统一归一成 \r\n；裸 \r（进度条覆盖式输出）按换行展示更易读。
-        final normalized = text
-            .replaceAll('\r\n', '\n')
-            .replaceAll('\r', '\n')
-            .replaceAll('\n', '\r\n');
+        // 裸 \n 只换行不回列（行首会阶梯缩进），统一归一成 \r\n；
+        // 再按级别着色——逐行做，正文和颜色都不改内容。
+        final normalized = colorizeLogChunk(normalizeLogNewlines(text));
         logTerminal.write(
           normalized.endsWith('\r\n') ? normalized : '$normalized\r\n',
         );

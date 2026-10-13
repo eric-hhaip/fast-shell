@@ -2,6 +2,34 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布]
+
+### 新增
+
+- **容器日志关键字搜索**：`⌘F` 唤出搜索栏，命中数实时统计，`Enter` / `Shift+Enter`（或标题栏箭头）在命中之间上下跳转并滚动到视口中央，`Esc` 关闭；所有命中在终端上用高亮标出，当前命中加深并描边。内嵌面板与全屏窗口行为一致
+- **容器日志级别着色**：写入终端前按日志级别着色——`ERROR` / `FATAL` / `CRITICAL` 亮红、`WARN` 亮黄、`INFO` 亮绿、`DEBUG` / `TRACE` 灰、行首时间戳灰，正文保持默认色；已带 ANSI 颜色的日志原样透传，不与之打架
+
+### 修复
+
+- **新连接对话框「分类」下拉框与「连接名称」输入框不等高、文字被裁**：分类框可见部分改用与 `TextField` 相同的 `InputDecorator` 外壳（共用主题），高度由同一公式产生，两框严格等高
+- **终端拖拽选中时越出上下边界不滚动视口**：指针进入边界感应区即逐行滚动，每次滚动后按当前指针位置重算选区，边界外的文本可以正常选中
+
+### 变更
+
+- **连接数据改存沙盒容器之外**：`vault.enc` / `vault.key` 从
+  `~/Library/Containers/com.hhaip.hhaipShell/…` 迁到 `~/Library/Application Support/FastShell/`。
+  沙盒容器会在应用重装或代码签名变化时被 macOS 重置，用户看到的现象就是「连接和分类全没了」；
+  容器外的目录只受用户自己操作影响。升级后若新位置为空而容器里还有数据，会自动搬迁一次。
+- **不再启用 App Sandbox**：工作方式与沙盒长期冲突（直读 `~/.ssh` 私钥、下载到任意目录），
+  且 macOS 26 上 `temporary-exception.files.home-relative-path.*` 例外已不生效，无法把数据目录
+  留在容器外。`macos/Runner/*.entitlements` 现仅保留 `com.apple.security.network.client`，
+  数据固定落在 `~/Library/Application Support/FastShell/`，不再随容器生命周期起伏。
+
+### 工具
+
+- `tool/install_macos.sh`：一键安装到 `/Applications`，重签时带上 entitlements，并校验签名有效、
+  出站网络权限在位、数据目录可写
+
 ## [1.0.0] - 2026-10-09
 
 首个公开版本。
@@ -17,7 +45,7 @@
 - **SFTP 文件传输**（`⌘⇧F`）：目录树、文件在线查看与编辑、拖拽上传、下载到 `~/Downloads` 或自选位置、传输队列（进度 / 速度 / 取消）
 - **传输记录手动清除**：失败记录保留并展示原因，成功记录可一键在访达中显示
 - **安全存储**：连接信息 AES-256-GCM 加密落盘，密钥由主密钥文件 + 本机硬件 UUID 经 HKDF 派生
-- **纯 Dart 自检**：`tool/verify.dart`（84 项用例），无需 GUI 环境
+- **纯 Dart 自检**：`tool/verify.dart`（119 项用例），无需 GUI 环境
 - **发布打包脚本**：`tool/build_release.sh`（剥符号 + 产物体检）
 - **版本发布脚本**：`tool/publish_release.sh`（一键发布到 CNB Release，含附件上传与确认）
 - **GitHub 发布脚本**：`tool/publish_github.sh`（一键发布到 GitHub Release）+ `tool/push_github_api.py`（git 协议不通时改走 REST API 镜像历史）

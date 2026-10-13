@@ -6,9 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:xterm/xterm.dart';
 
+import '../services/log_text.dart';
 import '../services/monitor_service.dart';
 import '../state/app_store.dart';
 import '../state/monitor_state.dart';
+import 'log_search.dart';
 import 'theme.dart';
 import 'widgets/common.dart';
 
@@ -25,6 +27,9 @@ class MonitorPanel extends StatefulWidget {
 
 class _MonitorPanelState extends State<MonitorPanel> {
   final ScrollController _logScroll = ScrollController();
+
+  /// 内嵌日志视图：标题栏的搜索按钮通过它唤出搜索栏
+  final _logViewKey = GlobalKey<_LogViewBodyState>();
 
   /// 全屏日志窗口是否打开：打开时内嵌视图让位，
   /// 否则两个视口会同时改动同一个 Terminal 的网格尺寸
@@ -45,7 +50,9 @@ class _MonitorPanelState extends State<MonitorPanel> {
         behavior: SnackBarBehavior.floating,
         width: 340,
         duration: Duration(seconds: error ? 4 : 2),
-        backgroundColor: error ? const Color(0xFF5A2430) : const Color(0xFF232A35),
+        backgroundColor: error
+            ? const Color(0xFF5A2430)
+            : const Color(0xFF232A35),
       ),
     );
   }
@@ -85,8 +92,11 @@ class _MonitorPanelState extends State<MonitorPanel> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.monitor_heart_outlined,
-              size: 15, color: Color(0xFF12B5A5)),
+          const Icon(
+            Icons.monitor_heart_outlined,
+            size: 15,
+            color: Color(0xFF12B5A5),
+          ),
           const SizedBox(width: 7),
           Text(
             showLogs ? '容器日志 · ${monitor.logContainer}' : '服务器监控',
@@ -99,6 +109,13 @@ class _MonitorPanelState extends State<MonitorPanel> {
             overflow: TextOverflow.ellipsis,
           ),
           const Spacer(),
+          if (showLogs)
+            AppIconButton(
+              icon: Icons.search,
+              tooltip: '搜索日志（⌘F）',
+              iconColor: const Color(0xFF9B6BE0),
+              onPressed: () => _logViewKey.currentState?.openSearch(),
+            ),
           if (showLogs)
             AppIconButton(
               icon: monitor.logFollowing
@@ -189,8 +206,11 @@ class _MonitorPanelState extends State<MonitorPanel> {
             const SizedBox(height: 10),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(monitor.error!, textAlign: TextAlign.center,
-                  style: AppText.secondary),
+              child: Text(
+                monitor.error!,
+                textAlign: TextAlign.center,
+                style: AppText.secondary,
+              ),
             ),
           ],
         ),
@@ -255,7 +275,11 @@ class _MonitorPanelState extends State<MonitorPanel> {
         children: [
           Row(
             children: [
-              const Icon(Icons.dns_outlined, size: 14, color: AppColors.textSecondary),
+              const Icon(
+                Icons.dns_outlined,
+                size: 14,
+                color: AppColors.textSecondary,
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -337,12 +361,8 @@ class _MonitorPanelState extends State<MonitorPanel> {
   }
 
   Widget _networkCard(MonitorState monitor) {
-    final rx = monitor.rxHistory.isEmpty
-        ? null
-        : monitor.rxHistory.last;
-    final tx = monitor.txHistory.isEmpty
-        ? null
-        : monitor.txHistory.last;
+    final rx = monitor.rxHistory.isEmpty ? null : monitor.rxHistory.last;
+    final tx = monitor.txHistory.isEmpty ? null : monitor.txHistory.last;
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
@@ -410,7 +430,10 @@ class _MonitorPanelState extends State<MonitorPanel> {
                       width: 86,
                       child: Text(
                         disk.mount,
-                        style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          color: AppColors.textSecondary,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -425,8 +448,8 @@ class _MonitorPanelState extends State<MonitorPanel> {
                           color: disk.percent > 90
                               ? AppColors.danger
                               : disk.percent > 75
-                                  ? const Color(0xFFF0A02E)
-                                  : const Color(0xFF2F9BD8),
+                              ? const Color(0xFFF0A02E)
+                              : const Color(0xFF2F9BD8),
                         ),
                       ),
                     ),
@@ -471,14 +494,18 @@ class _MonitorPanelState extends State<MonitorPanel> {
                   children: [
                     SizedBox(
                       width: 44,
-                      child: Text('${proc.pid}',
-                          style: AppText.mono.copyWith(fontSize: 10.5)),
+                      child: Text(
+                        '${proc.pid}',
+                        style: AppText.mono.copyWith(fontSize: 10.5),
+                      ),
                     ),
                     Expanded(
                       child: Text(
                         proc.command,
                         style: const TextStyle(
-                            fontSize: 11.5, color: AppColors.textSecondary),
+                          fontSize: 11.5,
+                          color: AppColors.textSecondary,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -515,8 +542,11 @@ class _MonitorPanelState extends State<MonitorPanel> {
         children: [
           Row(
             children: [
-              const Icon(Icons.view_in_ar_outlined,
-                  size: 14, color: Color(0xFF0E9888)),
+              const Icon(
+                Icons.view_in_ar_outlined,
+                size: 14,
+                color: Color(0xFF0E9888),
+              ),
               const SizedBox(width: 6),
               const Text('Docker 容器', style: AppText.tertiary),
               const Spacer(),
@@ -531,14 +561,11 @@ class _MonitorPanelState extends State<MonitorPanel> {
           const SizedBox(height: 8),
           if (containers.isEmpty)
             Text(
-              monitor.dockerLoading
-                  ? '正在检测容器…'
-                  : '未检测到容器（未安装 Docker 或没有容器）',
+              monitor.dockerLoading ? '正在检测容器…' : '未检测到容器（未安装 Docker 或没有容器）',
               style: AppText.tertiary,
             )
           else
-            for (final container in containers)
-              _containerRow(store, container),
+            for (final container in containers) _containerRow(store, container),
         ],
       ),
     );
@@ -610,21 +637,51 @@ class _MonitorPanelState extends State<MonitorPanel> {
             Row(
               children: [
                 if (!container.isRunning)
-                  _opButton(store, container, '启动', Icons.play_arrow,
-                      const Color(0xFF12A150), 'start')
+                  _opButton(
+                    store,
+                    container,
+                    '启动',
+                    Icons.play_arrow,
+                    const Color(0xFF12A150),
+                    'start',
+                  )
                 else ...[
-                  _opButton(store, container, '停止', Icons.stop,
-                      const Color(0xFFE0A02E), 'stop'),
+                  _opButton(
+                    store,
+                    container,
+                    '停止',
+                    Icons.stop,
+                    const Color(0xFFE0A02E),
+                    'stop',
+                  ),
                   const SizedBox(width: 6),
-                  _opButton(store, container, '重启', Icons.refresh,
-                      const Color(0xFF2F6BFF), 'restart'),
+                  _opButton(
+                    store,
+                    container,
+                    '重启',
+                    Icons.refresh,
+                    const Color(0xFF2F6BFF),
+                    'restart',
+                  ),
                 ],
                 const SizedBox(width: 6),
-                _opButton(store, container, '日志', Icons.article_outlined,
-                    const Color(0xFF9B6BE0), null),
+                _opButton(
+                  store,
+                  container,
+                  '日志',
+                  Icons.article_outlined,
+                  const Color(0xFF9B6BE0),
+                  null,
+                ),
                 const SizedBox(width: 6),
-                _opButton(store, container, '删除', Icons.delete_outline,
-                    AppColors.danger, 'rm'),
+                _opButton(
+                  store,
+                  container,
+                  '删除',
+                  Icons.delete_outline,
+                  AppColors.danger,
+                  'rm',
+                ),
               ],
             ),
           ],
@@ -740,36 +797,13 @@ class _MonitorPanelState extends State<MonitorPanel> {
       );
     }
     // 实时跟踪时始终吸底（由 _LogTail 监听终端变化驱动，不依赖整页重建）
-    return Column(
-      children: [
-        // 零尺寸的尾部感知器：驱动吸底
-        _LogTail(
-          terminal: monitor.logTerminal,
-          scrollController: _logScroll,
-          following: monitor.logFollowing,
-          builder: (context) => const SizedBox.shrink(),
-        ),
-        if (monitor.logError != null)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            color: AppColors.danger.withValues(alpha: 0.08),
-            child: Text(
-              monitor.logError!,
-              style: const TextStyle(fontSize: 11.5, color: AppColors.danger),
-            ),
-          ),
-        Expanded(
-          child: Container(
-            color: const Color(0xFF0D1626),
-            child: _LogTerminal(
-              terminal: monitor.logTerminal,
-              scrollController: _logScroll,
-              fontSize: 11,
-            ),
-          ),
-        ),
-      ],
+    return _LogViewBody(
+      key: _logViewKey,
+      terminal: monitor.logTerminal,
+      scrollController: _logScroll,
+      following: monitor.logFollowing,
+      error: monitor.logError,
+      fontSize: 11,
     );
   }
 
@@ -871,7 +905,9 @@ class _MiniButtonState extends State<_MiniButton> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: _hover ? widget.color.withValues(alpha: 0.1) : Colors.transparent,
+              color: _hover
+                  ? widget.color.withValues(alpha: 0.1)
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(5),
               border: Border.all(
                 color: _hover
@@ -908,11 +944,12 @@ class _SparklinePainter extends CustomPainter {
     required this.color,
     this.overlay,
     this.overlayColor,
-  })  : _len = data.length,
-        _last = data.isEmpty ? null : data.last,
-        _overlayLen = overlay?.length ?? -1,
-        _overlayLast =
-            (overlay == null || overlay.isEmpty) ? null : overlay.last;
+  }) : _len = data.length,
+       _last = data.isEmpty ? null : data.last,
+       _overlayLen = overlay?.length ?? -1,
+       _overlayLast = (overlay == null || overlay.isEmpty)
+           ? null
+           : overlay.last;
 
   final List<double> data;
   final Color color;
@@ -944,7 +981,8 @@ class _SparklinePainter extends CustomPainter {
     final path = Path()..moveTo(0, size.height);
     for (final (index, value) in data.indexed) {
       final x = index * stepX;
-      final y = size.height - (value / maxV * size.height).clamp(0.0, size.height);
+      final y =
+          size.height - (value / maxV * size.height).clamp(0.0, size.height);
       path.lineTo(x, y);
     }
     path.lineTo((data.length - 1) * stepX, size.height);
@@ -956,14 +994,18 @@ class _SparklinePainter extends CustomPainter {
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [color.withValues(alpha: 0.30), color.withValues(alpha: 0.02)],
+          colors: [
+            color.withValues(alpha: 0.30),
+            color.withValues(alpha: 0.02),
+          ],
         ).createShader(Offset.zero & size),
     );
 
     final line = Path();
     for (final (index, value) in data.indexed) {
       final x = index * stepX;
-      final y = size.height - (value / maxV * size.height).clamp(0.0, size.height);
+      final y =
+          size.height - (value / maxV * size.height).clamp(0.0, size.height);
       if (index == 0) {
         line.moveTo(x, y);
       } else {
@@ -996,6 +1038,247 @@ class _SparklinePainter extends CustomPainter {
   }
 }
 
+/// 日志终端与搜索高亮共用的字体设置。
+///
+/// 搜索高亮的坐标换算要按字格尺寸来算，所以两处必须引用同一份定义——
+/// 各自写一套迟早会漂移成「高亮整体偏半行」。
+TerminalStyle logTerminalTextStyle(double fontSize) => TerminalStyle(
+  fontSize: fontSize,
+  height: 1.35,
+  fontFamily: 'SF Mono',
+  fontFamilyFallback: const ['Menlo', 'monospace'],
+);
+
+/// 日志查看主体：吸底 + 搜索栏 + 终端 + 命中高亮。
+///
+/// 内嵌面板与全屏窗口共用同一个实现，两处的搜索行为（⌘F 打开、Enter 下一个、
+/// Shift+Enter 上一个、Esc 关闭）因此天然一致。
+class _LogViewBody extends StatefulWidget {
+  const _LogViewBody({
+    super.key,
+    required this.terminal,
+    required this.scrollController,
+    required this.following,
+    this.error,
+    this.fontSize = 11.5,
+    this.padding = const EdgeInsets.fromLTRB(10, 8, 10, 8),
+  });
+
+  final Terminal terminal;
+  final ScrollController scrollController;
+  final bool following;
+  final String? error;
+  final double fontSize;
+  final EdgeInsets padding;
+
+  @override
+  State<_LogViewBody> createState() => _LogViewBodyState();
+}
+
+class _LogViewBodyState extends State<_LogViewBody> {
+  final _searchCtl = TextEditingController();
+  final _searchFocus = FocusNode();
+
+  bool _searchOpen = false;
+  String _query = '';
+  List<LogMatch> _matches = const [];
+  int _current = -1;
+  Timer? _refreshThrottle;
+
+  /// 搜索栏打开且有关键字时，暂停自动吸底（见 build 里的说明）
+  bool get _searchActive => _searchOpen && _query.isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.terminal.addListener(_onTerminalChanged);
+  }
+
+  @override
+  void didUpdateWidget(_LogViewBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.terminal != widget.terminal) {
+      oldWidget.terminal.removeListener(_onTerminalChanged);
+      widget.terminal.addListener(_onTerminalChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    _refreshThrottle?.cancel();
+    widget.terminal.removeListener(_onTerminalChanged);
+    _searchCtl.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  // ------------------------------------------------------------ 搜索
+
+  /// 跟踪模式下日志会持续追加，命中位置随之变化；节流后重新扫描一遍。
+  void _onTerminalChanged() {
+    if (!_searchOpen || _query.isEmpty) return;
+    if (_refreshThrottle != null) return;
+    _refreshThrottle = Timer(const Duration(milliseconds: 400), () {
+      _refreshThrottle = null;
+      if (mounted) _refreshMatches(jump: false);
+    });
+  }
+
+  /// 打开搜索栏并聚焦输入框（供标题栏按钮与 ⌘F 共用）
+  void openSearch() {
+    if (_searchOpen) {
+      _searchFocus.requestFocus();
+      return;
+    }
+    setState(() => _searchOpen = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _searchFocus.requestFocus();
+    });
+  }
+
+  void _closeSearch() {
+    _searchCtl.clear();
+    setState(() {
+      _searchOpen = false;
+      _query = '';
+      _matches = const [];
+      _current = -1;
+    });
+  }
+
+  void _onQueryChanged(String value) {
+    _query = value.trim();
+    _refreshMatches();
+  }
+
+  /// 扫描整个缓冲区（含回滚）找命中。
+  ///
+  /// 直接读 xterm 的行文本而不是自己维护一份副本：终端里显示的才是用户
+  /// 看到的，且 ANSI 已被解析掉，关键字不会撞上颜色转义。
+  void _refreshMatches({bool jump = true}) {
+    final matches = _query.isEmpty
+        ? const <LogMatch>[]
+        : searchLogLines(_readBufferLines(), _query);
+    final current = matches.isEmpty
+        ? -1
+        : (_current >= 0 && _current < matches.length ? _current : 0);
+    setState(() {
+      _matches = matches;
+      _current = current;
+    });
+    if (jump) _scrollToCurrent();
+  }
+
+  List<String> _readBufferLines() {
+    final buffer = widget.terminal.buffer;
+    final lines = <String>[];
+    for (var i = 0; i < buffer.height; i++) {
+      lines.add(buffer.lines[i].getText(0, buffer.viewWidth));
+    }
+    return lines;
+  }
+
+  void _step(int delta) {
+    if (_matches.isEmpty) return;
+    final next = stepMatchIndex(_current, _matches.length, delta);
+    setState(() => _current = next);
+    _scrollToCurrent();
+  }
+
+  /// 把命中的行滚到视口正中，滚动量与 xterm 的像素滚动模型一致
+  /// （1 行 = 一个行高，见 terminal_selection.dart 的换算）。
+  void _scrollToCurrent() {
+    if (_current < 0 || _current >= _matches.length) return;
+    final scroll = widget.scrollController;
+    if (!scroll.hasClients) return;
+    final cell = measureTerminalCell(
+      context,
+      logTerminalTextStyle(widget.fontSize),
+    );
+    if (cell.height <= 0) return;
+    final position = scroll.position;
+    final row = _matches[_current].row;
+    final target =
+        widget.padding.top +
+        row * cell.height -
+        (position.viewportDimension - cell.height) / 2;
+    scroll.jumpTo(
+      target.clamp(position.minScrollExtent, position.maxScrollExtent),
+    );
+  }
+
+  // ------------------------------------------------------------ 构建
+
+  @override
+  Widget build(BuildContext context) {
+    final textStyle = logTerminalTextStyle(widget.fontSize);
+
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyF, meta: true): openSearch,
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true):
+            openSearch,
+      },
+      child: Column(
+        children: [
+          // 零尺寸的尾部感知器：驱动吸底。
+          // 搜索进行中不平滑吸底——否则「下一个」刚滚到命中行就被日志流拉回底部。
+          _LogTail(
+            terminal: widget.terminal,
+            scrollController: widget.scrollController,
+            following: widget.following && !_searchActive,
+            builder: (context) => const SizedBox.shrink(),
+          ),
+          if (widget.error != null)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              color: AppColors.danger.withValues(alpha: 0.08),
+              child: Text(
+                widget.error!,
+                style: const TextStyle(fontSize: 11.5, color: AppColors.danger),
+              ),
+            ),
+          if (_searchOpen)
+            LogSearchBar(
+              controller: _searchCtl,
+              focusNode: _searchFocus,
+              matchCount: _matches.length,
+              currentIndex: _current,
+              onChanged: _onQueryChanged,
+              onStep: _step,
+              onClose: _closeSearch,
+            ),
+          Expanded(
+            child: Container(
+              color: const Color(0xFF0D1626),
+              child: Stack(
+                children: [
+                  _LogTerminal(
+                    terminal: widget.terminal,
+                    scrollController: widget.scrollController,
+                    fontSize: widget.fontSize,
+                    padding: widget.padding,
+                  ),
+                  if (_searchOpen && _matches.isNotEmpty)
+                    LogSearchHighlight(
+                      terminal: widget.terminal,
+                      scrollController: widget.scrollController,
+                      matches: _matches,
+                      currentIndex: _current,
+                      textStyle: textStyle,
+                      padding: widget.padding,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// 只读日志终端：用 xterm 的定宽字符网格渲染日志。
 ///
 /// 为什么不用滚动文本列表：`Text`/`SelectableText` 会把整行排版成一个文本
@@ -1025,12 +1308,7 @@ class _LogTerminal extends StatelessWidget {
         scrollController: scrollController,
         theme: appTerminalTheme,
         padding: padding,
-        textStyle: TerminalStyle(
-          fontSize: fontSize,
-          height: 1.35,
-          fontFamily: 'SF Mono',
-          fontFamilyFallback: const ['Menlo', 'monospace'],
-        ),
+        textStyle: logTerminalTextStyle(fontSize),
         cursorType: TerminalCursorType.block,
         alwaysShowCursor: false,
         mouseCursor: SystemMouseCursors.text,
@@ -1131,6 +1409,9 @@ class _FullscreenLogView extends StatefulWidget {
 class _FullscreenLogViewState extends State<_FullscreenLogView> {
   final ScrollController _scroll = ScrollController();
 
+  /// 搜索栏挂在共用的 _LogViewBody 里，这里只负责把「打开搜索」的请求递进去
+  final _viewKey = GlobalKey<_LogViewBodyState>();
+
   @override
   void dispose() {
     _scroll.dispose();
@@ -1151,91 +1432,116 @@ class _FullscreenLogViewState extends State<_FullscreenLogView> {
         child: Container(
           color: const Color(0xFF0D1626),
           child: Column(
-        children: [
-          Container(
-            height: 44,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: const BoxDecoration(
-              color: Color(0xFF101B2E),
-              border: Border(
-                bottom: BorderSide(color: Color(0xFF23324A)),
-              ),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.article_outlined,
-                    size: 15, color: Color(0xFF9B6BE0)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '容器日志 · ${monitor.logContainer ?? ''}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFFDCE5F2),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+            children: [
+              Container(
+                height: 44,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF101B2E),
+                  border: Border(bottom: BorderSide(color: Color(0xFF23324A))),
                 ),
-                _LogTail(
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.article_outlined,
+                      size: 15,
+                      color: Color(0xFF9B6BE0),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '容器日志 · ${monitor.logContainer ?? ''}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFDCE5F2),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    _LogTail(
+                      terminal: monitor.logTerminal,
+                      scrollController: _scroll,
+                      following: monitor.logFollowing,
+                      builder: (context) => Text(
+                        '${monitor.logLineCount} 行'
+                        '${monitor.logFollowing ? ' · 实时跟踪中' : ''}',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          color: Color(0xFF6B7686),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Tooltip(
+                      message: '搜索日志（⌘F）',
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.search,
+                          size: 18,
+                          color: Color(0xFFDCE5F2),
+                        ),
+                        onPressed: () => _viewKey.currentState?.openSearch(),
+                      ),
+                    ),
+                    Tooltip(
+                      message: monitor.logFollowing ? '停止跟踪' : '实时跟踪',
+                      child: IconButton(
+                        icon: Icon(
+                          monitor.logFollowing
+                              ? Icons.pause_circle_outline
+                              : Icons.play_circle_outline,
+                          size: 18,
+                          color: monitor.logFollowing
+                              ? const Color(0xFF12A150)
+                              : const Color(0xFF6B7686),
+                        ),
+                        onPressed: () =>
+                            widget.store.toggleLogFollow(widget.tab),
+                      ),
+                    ),
+                    Tooltip(
+                      message: '重新加载',
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.refresh,
+                          size: 18,
+                          color: Color(0xFF2F9BD8),
+                        ),
+                        onPressed: monitor.logContainer == null
+                            ? null
+                            : () => widget.store.openContainerLogs(
+                                widget.tab,
+                                monitor.logContainer!,
+                              ),
+                      ),
+                    ),
+                    Tooltip(
+                      message: '退出全屏（Esc）',
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.close,
+                          size: 18,
+                          color: Color(0xFF6B7686),
+                        ),
+                        onPressed: widget.onClose,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: _LogViewBody(
+                  key: _viewKey,
                   terminal: monitor.logTerminal,
                   scrollController: _scroll,
                   following: monitor.logFollowing,
-                  builder: (context) => Text(
-                    '${monitor.logLineCount} 行'
-                    '${monitor.logFollowing ? ' · 实时跟踪中' : ''}',
-                    style: const TextStyle(
-                        fontSize: 11.5, color: Color(0xFF6B7686)),
-                  ),
+                  fontSize: 11.5,
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
                 ),
-                const SizedBox(width: 10),
-                Tooltip(
-                  message: monitor.logFollowing ? '停止跟踪' : '实时跟踪',
-                  child: IconButton(
-                    icon: Icon(
-                      monitor.logFollowing
-                          ? Icons.pause_circle_outline
-                          : Icons.play_circle_outline,
-                      size: 18,
-                      color: monitor.logFollowing
-                          ? const Color(0xFF12A150)
-                          : const Color(0xFF6B7686),
-                    ),
-                    onPressed: () => widget.store.toggleLogFollow(widget.tab),
-                  ),
-                ),
-                Tooltip(
-                  message: '重新加载',
-                  child: IconButton(
-                    icon: const Icon(Icons.refresh,
-                        size: 18, color: Color(0xFF2F9BD8)),
-                    onPressed: monitor.logContainer == null
-                        ? null
-                        : () => widget.store
-                            .openContainerLogs(widget.tab, monitor.logContainer!),
-                  ),
-                ),
-                Tooltip(
-                  message: '退出全屏（Esc）',
-                  child: IconButton(
-                    icon: const Icon(Icons.close,
-                        size: 18, color: Color(0xFF6B7686)),
-                    onPressed: widget.onClose,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: _LogTerminal(
-              terminal: monitor.logTerminal,
-              scrollController: _scroll,
-              fontSize: 11.5,
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-            ),
-          ),
-        ],
+              ),
+            ],
           ),
         ),
       ),

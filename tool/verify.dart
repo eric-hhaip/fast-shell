@@ -428,6 +428,92 @@ cpu  200 0 200 800 100 0 0 0 0 0
     5,
   );
 
+  print('日志着色');
+  const esc = '\u001b[';
+  check(
+    'ERROR 词被染红',
+    colorizeLogLine('ERROR failed to connect')
+        .contains('${esc}1;91mERROR${esc}0m'),
+    true,
+  );
+  check(
+    'WARN 词被染黄',
+    colorizeLogLine('WARN disk almost full').contains('${esc}93mWARN${esc}0m'),
+    true,
+  );
+  check(
+    'INFO 词被染绿',
+    colorizeLogLine('INFO server started').contains('${esc}92mINFO${esc}0m'),
+    true,
+  );
+  check(
+    '时间戳染灰且正文保持默认色',
+    colorizeLogLine('2026-10-13 10:00:01 INFO boot').startsWith(
+      '${esc}90m2026-10-13 10:00:01${esc}0m ${esc}92mINFO${esc}0m boot',
+    ),
+    true,
+  );
+  check(
+    '时间戳与级别词之间不重复着色',
+    colorizeLogLine('2026-10-13T10:00:01Z ERROR boom')
+        .contains('${esc}0m ${esc}1;91mERROR${esc}0m'),
+    true,
+  );
+  check(
+    '正文小写 error 不染色（只认全大写级别词）',
+    colorizeLogLine('error occurred while opening file'),
+    'error occurred while opening file',
+  );
+  check(
+    '行尾出现的级别词不染色（只扫行首 48 字符）',
+    colorizeLogLine('本次请求返回内容：' * 6 + 'ERROR'),
+    '本次请求返回内容：' * 6 + 'ERROR',
+  );
+  check('无级别无时间戳的行原样返回', colorizeLogLine('listen on :8080'), 'listen on :8080');
+  check(
+    '已含 ANSI 的行原样返回（尊重上游着色）',
+    colorizeLogLine('${esc}32mINFO${esc}0m custom colored'),
+    '${esc}32mINFO${esc}0m custom colored',
+  );
+  check('空行原样返回', colorizeLogLine(''), '');
+  check('多行块逐行着色', colorizeLogChunk('INFO a\nERROR b').split('\n').length, 2);
+  check(
+    '多行块中错误行的级别词被染色',
+    colorizeLogChunk('INFO a\nERROR b').contains('${esc}1;91mERROR${esc}0m'),
+    true,
+  );
+
+  print('日志搜索');
+  check('单行多命中', findMatchColumns('aaa', 'a').join(','), '0,1,2');
+  check('命中不重叠', findMatchColumns('aaaa', 'aa').join(','), '0,2');
+  check('大小写不敏感', findMatchColumns('Error ERROR', 'error').join(','), '0,6');
+  check('未命中返回空', findMatchColumns('abc', 'z').length, 0);
+  check('空关键字返回空', findMatchColumns('abc', '').length, 0);
+  check('空行返回空', findMatchColumns('', 'a').length, 0);
+
+  const searchLines = ['INFO boot', 'ERROR disk full', 'INFO ok ERROR again'];
+  final matches = searchLogLines(searchLines, 'ERROR');
+  check('全量搜索命中数', matches.length, 2);
+  check('首条命中行号', matches[0].row, 1);
+  check('首条命中列号', matches[0].column, 0);
+  check('次条命中行号', matches[1].row, 2);
+  check('次条命中列号', matches[1].column, 8);
+  check('匹配长度等于关键字长度', matches[1].length, 5);
+  check('空关键字不做全量搜索', searchLogLines(searchLines, '').length, 0);
+
+  check('下一个：中间项前进', stepMatchIndex(0, 3, 1), 1);
+  check('下一个：末项回到首项（循环）', stepMatchIndex(2, 3, 1), 0);
+  check('上一个：首项回到末项（循环）', stepMatchIndex(0, 3, -1), 2);
+  check('上一个：中间项后退', stepMatchIndex(2, 3, -1), 1);
+  check('未定位时向下取首项', stepMatchIndex(-1, 3, 1), 0);
+  check('未定位时向上取末项', stepMatchIndex(-1, 3, -1), 2);
+  check('无命中返回 -1', stepMatchIndex(0, 0, 1), -1);
+
+  print('日志换行归一');
+  check('CRLF 归一为单次换行', normalizeLogNewlines('a\r\nb'), 'a\r\nb');
+  check('裸 LF 补回车', normalizeLogNewlines('a\nb'), 'a\r\nb');
+  check('裸 CR 按换行处理', normalizeLogNewlines('a\rb'), 'a\r\nb');
+
   print('\n通过 $_passed 项，失败 $_failed 项');
   if (_failed > 0) {
     throw StateError('自检未通过');
