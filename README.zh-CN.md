@@ -71,7 +71,7 @@ Fast Shell 把这些合到一个原生 macOS 窗口里：连上主机，终端�
 - CPU 总占用与单核曲线、内存与 Swap、磁盘挂载点用量条、网络上下行实时速率
 - CPU 占用 Top 进程列表（PID / 用户 / 命令 / 占用）
 - **Docker 容器管理**：列表（名称 / 镜像 / 状态 / 内存 / 网络 IO），支持启动 / 停止 / 重启 / 删除 / 查看日志
-- 容器日志全屏查看，可跟随滚动，同样不做截断
+- 容器日志全屏查看，可跟随滚动，同样不做截断；`⌘F` 关键字搜索（命中计数 + 上一下一个跳转 + 全部命中高亮）、按级别着色（`ERROR` 红 / `WARN` 黄 / `INFO` 绿 / 时间戳灰）
 - 连接建立后**后台预取首份数据**，点开面板即刻出数，不用再等冷启动那十几秒
 - 应用切到后台自动暂停轮询，回到前台恢复，不空耗 CPU
 
@@ -81,7 +81,7 @@ Fast Shell 把这些合到一个原生 macOS 窗口里：连上主机，终端�
   可在线编辑并保存回远端，未保存离开有二次确认
 - 目录浏览：面包屑路径、上一级、主目录、点文件显示开关
 - 上传：多选文件 / 整个文件夹 / **直接拖拽到面板**，也可在目录右键「上传文件到此处」
-- 下载：默认直接存到 `~/Downloads`（沙盒下唯一有明确写权限的位置，少一次面板交互）；
+- 下载：默认直接存到 `~/Downloads`（通用且无需额外授权，少一次面板交互）；
   右键也可选「下载到…（选择位置）」，该位置会先做一次真实写入探测，不可写则自动回退到 `~/Downloads` 并提示
 - 下载采用「临时文件 + 原子改名」：中途失败或取消不会留下半截文件，也不会破坏本地同名文件
 - 右键菜单：查看内容 / 编辑文件 / 下载到 `~/Downloads` / 下载到… / 重命名 / 新建文件夹 / 复制路径 / 删除（目录递归删除）
@@ -133,7 +133,7 @@ flutter pub get
 # 开发运行（热重载）
 flutter run -d macos
 
-# 纯 Dart 逻辑自检（84 项，无需 GUI 环境）
+# 纯 Dart 逻辑自检（119 项，无需 GUI 环境）
 dart run tool/verify.dart
 
 # 静态检查
@@ -166,20 +166,33 @@ Flutter 3.47 起 macOS 默认使用 **Impeller** 渲染后端，本项目在其�
 
 若你的机器在 Impeller 下无异常，可移除该键以启用 Impeller 获得更好的合成性能。
 
-### 沙盒配置
+### 权限配置（不使用 App Sandbox）
 
-`macos/Runner/*.entitlements` 中已声明必要能力，改动前请留意：
+`macos/Runner/*.entitlements` 只声明一条权限：
 
 | 权限 | 用途 |
 | --- | --- |
-| `com.apple.security.network.client` | SSH 出站连接（必需） |
-| `com.apple.security.files.user-selected.read-write` | 上传 / 下载用户通过面板选择的文件 |
-| `com.apple.security.files.downloads.read-write` | 默认下载目录（**下载功能的兜底保障，不要删**） |
-| `com.apple.security.files.home-relative-path.read-only: ~/.ssh/` | 免手动选文件的私钥读取 |
+| `com.apple.security.network.client` | SSH / SFTP 出站连接（必需） |
+
+**本应用刻意不启用 App Sandbox**，原因写在 `Release.entitlements` 的注释里：
+
+- 工作方式与沙盒长期冲突——要直读 `~/.ssh` 下的私钥、要把文件下载到用户指定的任意目录。
+- 沙盒容器 `~/Library/Containers/<bundle-id>/` 会在应用重装、代码签名变化等情况下被系统重置，
+  用户看到的现象就是「连接和分类全没了」（数据本身没坏）。
+- macOS 26 上 `temporary-exception.files.home-relative-path.*` 例外已不生效，无法把数据目录
+  留在容器外。
+
+因此连接配置固定存放于：
+
+```
+~/Library/Application Support/FastShell/vault.enc   # 加密后的连接与分类
+~/Library/Application Support/FastShell/vault.key    # 主密钥（0600）
+```
+
+该目录不随应用重装、重签而清空。首次启动会自动尝试从历史沙盒容器迁移一次数据。
 
 > **注意**：`file_picker` 在 macOS 上只返回路径字符串，**不会**为返回的目录保留安全作用域书签。
-> 因此在沙盒里，把文件写进用户通过面板选择的目录有时会被系统拒绝。
-> 这就是下载默认落地 `~/Downloads`、自选位置前先做一次写入探测的原因。
+> 所以下载默认落地 `~/Downloads`，用户自选位置前会先做一次写入探测，失败则回退。
 
 ### 发布新版本
 
@@ -211,8 +224,12 @@ CNB 访问令牌在 <https://cnb.cool/profile/token/create> 创建，**授权范
 
 | 内容 | 路径 |
 | --- | --- |
-| 加密配置（连接 + 设置） | `~/Library/Containers/com.hhaip.hhaipShell/Data/Library/Application Support/com.hhaip.hhaipShell/vault.enc` |
+| 加密配置（连接 + 设置） | `~/Library/Application Support/FastShell/vault.enc` |
 | 主密钥（权限 0600） | 同目录 `vault.key` |
+
+> 数据**刻意放在沙盒容器之外**：macOS 会在应用重装、代码签名变化等情况下重置
+> `~/Library/Containers/<bundle-id>/`，把连接数据押在容器里迟早会丢。为此本应用
+> **不启用 App Sandbox**，数据直接落在 `~/Library/Application Support/FastShell/`。
 
 > 删除 `vault.key` 会导致已有连接配置无法解密（应用会自动把损坏文件备份为 `vault.enc.corrupt-*` 并重置）。
 
@@ -233,7 +250,7 @@ lib/
 │   ├── ssh_session.dart         # SSH 会话 + SFTP 通道封装 + 流式 UTF-8 解码
 │   ├── monitor_service.dart     # 远端指标采集（CPU/内存/磁盘/网络/进程/容器）
 │   ├── local_io.dart            # 本地下载目录 / 写入探测 / 访达定位 / 错误翻译
-│   ├── log_text.dart            # 日志文本纯函数（净化 / 行数统计），可独立自检
+│   ├── log_text.dart            # 日志文本纯函数（净化 / 归一 / 级别着色 / 关键字搜索），可独立自检
 │   └── remote_path.dart         # 远端路径工具
 ├── state/
 │   ├── app_store.dart           # 全局状态：连接 / 标签 / 传输 / SFTP / 设置
@@ -243,7 +260,8 @@ lib/
     ├── sidebar.dart             # 连接列表（搜索 / 分类 / 右键菜单）
     ├── connection_editor.dart   # 连接编辑弹窗（含分类管理）
     ├── terminal_panel.dart      # 终端视图 + 工具栏 + 功能键条
-    ├── monitor_panel.dart       # 服务器监控 + Docker 容器 + 日志全屏
+    ├── monitor_panel.dart       # 服务器监控 + Docker 容器 + 日志视图（搜索 / 着色）
+    ├── log_search.dart          # 日志搜索栏 + 命中高亮层
     ├── sftp_panel.dart          # 文件面板（目录树 / 查看 / 编辑 / 上传下载）
     ├── transfer_bar.dart        # 传输队列
     ├── settings_dialog.dart     # 设置
@@ -251,7 +269,7 @@ lib/
     ├── theme.dart               # 配色 / 主题 / 终端配色
     └── widgets/common.dart      # 通用小组件与弹窗
 tool/
-├── verify.dart                  # 纯 Dart 自检（84 项），CI 可直接跑
+├── verify.dart                  # 纯 Dart 自检（119 项），CI 可直接跑
 ├── build_release.sh             # 标准发布打包（剥符号 + 产物体检）
 ├── publish_github.sh            # 发布到 GitHub Releases（推代码 + 建版本 + 传附件）
 ├── push_github_api.py           # 用 REST API 把 git 历史镜像到 GitHub（git 协议不通时用）
@@ -300,7 +318,7 @@ tool/
 提交前请确保：
 
 ```bash
-dart run tool/verify.dart   # 84 项自检全绿
+dart run tool/verify.dart   # 119 项自检全绿
 flutter analyze             # 无 warning 及以上
 ```
 

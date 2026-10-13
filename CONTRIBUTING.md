@@ -31,7 +31,7 @@ flutter run -d macos
 
 ```bash
 flutter run -d macos          # 开发运行（热重载）
-dart run tool/verify.dart     # 纯 Dart 自检（84 项，不需要 GUI）
+dart run tool/verify.dart     # 纯 Dart 自检（119 项，不需要 GUI）
 flutter analyze               # 静态检查
 flutter test                  # Widget 测试（部分沙盒环境可能起不了 flutter_tester）
 tool/build_release.sh         # 发布打包：剥符号 + 产物体检
@@ -46,7 +46,7 @@ tool/build_release.sh         # 发布打包：剥符号 + 产物体检
 - **异步必须兜错**：所有用户可触发的异步动作都要 `try/catch` 并把错误通过 snackbar / 内联提示暴露出来。
   吞异常会导致「点了没反应」，这是本项目明确要避免的问题
 - **纯逻辑抽离**：凡是可以在无 UI 环境下测试的逻辑，放到 `lib/services/` 并保持无 Flutter 依赖
-- **本地落盘**：统一走 `LocalIo`，不要直接拼路径。macOS 沙盒下可写目录有限，
+- **本地落盘**：统一走 `LocalIo`，不要直接拼路径。
   用户自选目录必须先 `probeWritable()` 探测，失败回退 `~/Downloads`
 - **原子写文件**：下载 / 上传一律「临时文件 + 原子改名」，中途失败不得留下半截文件
 - **重绘隔离**：新增会频繁刷新的可视区域，请包 `RepaintBoundary`，
@@ -90,7 +90,7 @@ fix(sftp): 修复取消下载后残留半截文件
    - [ ] 新增纯逻辑已补 `tool/verify.dart` 用例
    - [ ] `flutter analyze` 无 warning 及以上
    - [ ] 涉及 UI 的改动已在 macOS 上实际点过一遍
-   - [ ] 涉及 entitlements / 沙盒的改动已在 PR 描述里说明原因
+   - [ ] 涉及 entitlements 的改动已在 PR 描述里说明原因（本项目刻意不用 App Sandbox，见 `Release.entitlements` 注释）
    - [ ] 更新了 `CHANGELOG.md`
 4. 提交 PR，描述里写明：**改了什么 / 为什么改 / 怎么验证**
 5. 若改动涉及渲染或大量文件，请附上前后对比（截图或数据）

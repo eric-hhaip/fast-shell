@@ -77,7 +77,7 @@ connection details are encrypted locally and never leave your machine.
 - Top processes by CPU (PID / user / command / usage)
 - **Docker container management**: list (name / image / state / memory / network I/O) with start, stop,
   restart, delete and log viewing
-- Full-screen container logs with follow-scroll — also never truncated
+- Container logs: never truncated, follow-scroll, full-screen view, keyword search (`⌘F`, count + prev/next jump, all hits highlighted) and level colouring (`ERROR` red / `WARN` yellow / `INFO` green / timestamps grey)
 - **Prefetches the first sample in the background** right after connecting, so opening the panel shows data
   immediately instead of waiting out a cold start
 - Polling pauses automatically when the app goes to the background and resumes on return, so it never burns
@@ -92,8 +92,8 @@ connection details are encrypted locally and never leave your machine.
 - Directory browsing: breadcrumb path, parent directory, home directory, toggle for dotfiles
 - Upload: multi-select files, whole folders, or **drag and drop onto the panel**; right-click a directory to
   "upload file here" as well
-- Download: files land in `~/Downloads` by default (the one location the sandbox guarantees write access to,
-  saving a panel round-trip). Right-click offers "Download to…", which probes the chosen directory with a
+- Download: files land in `~/Downloads` by default (universally available, saving a panel round-trip).
+  Right-click offers "Download to…", which probes the chosen directory with a
   real write before using it and falls back to `~/Downloads` with a notice if it is not writable
 - Downloads use a temp file plus an atomic rename: a cancelled or failed transfer leaves no half-written
   file and never clobbers an existing file of the same name
@@ -181,21 +181,38 @@ artifacts under it, so Impeller is explicitly disabled in `macos/Runner/Info.pli
 
 If Impeller works fine on your machine, remove that key to get better compositing performance.
 
-### Sandbox configuration
+### Entitlements (no App Sandbox)
 
-The required capabilities are already declared in `macos/Runner/*.entitlements`. Read this before changing them:
+`macos/Runner/*.entitlements` declares exactly one entitlement:
 
 | Entitlement | Purpose |
 | --- | --- |
-| `com.apple.security.network.client` | Outbound SSH connections (required) |
-| `com.apple.security.files.user-selected.read-write` | Uploading / downloading files the user picks in a panel |
-| `com.apple.security.files.downloads.read-write` | Default download directory (**the safety net for downloads — do not remove**) |
-| `com.apple.security.files.home-relative-path.read-only: ~/.ssh/` | Reading private keys without a manual file picker |
+| `com.apple.security.network.client` | Outbound SSH / SFTP connections (required) |
 
-> **Note**: on macOS `file_picker` only returns a path string and does **not** retain a security-scoped
-> bookmark for the returned directory. Inside the sandbox, writing into a user-selected directory can
-> therefore be refused by the system. That is why downloads default to `~/Downloads` and why a custom
-> location is write-probed first.
+**This app deliberately does not enable App Sandbox**, for the reasons documented in
+`Release.entitlements`:
+
+- The sandbox fights the app's core workflow — it must read private keys under `~/.ssh` directly and
+  write downloads into arbitrary user-chosen directories.
+- The sandbox container `~/Library/Containers/<bundle-id>/` gets reset by the system on app
+  reinstall or code-signature changes, which users experience as "all my connections and categories
+  are gone" (the data itself is intact).
+- On macOS 26 the `temporary-exception.files.home-relative-path.*` exceptions no longer take effect,
+  so the data directory cannot be kept outside the container.
+
+Connection data therefore lives at a fixed location:
+
+```
+~/Library/Application Support/FastShell/vault.enc   # encrypted connections & categories
+~/Library/Application Support/FastShell/vault.key    # master key (0600)
+```
+
+This directory survives reinstalls and re-signing. On first launch the app will try a one-time
+migration from the legacy sandbox container.
+
+> **Note**: on macOS `file_picker` only returns a path string and does **not** retain a
+> security-scoped bookmark for the returned directory. That is why downloads default to
+> `~/Downloads` and why a custom location is write-probed first, falling back on failure.
 
 ### Publishing a release
 
@@ -230,8 +247,13 @@ the asset stays in an "uploaded but invisible" limbo.
 
 | What | Path |
 | --- | --- |
-| Encrypted config (connections + settings) | `~/Library/Containers/com.hhaip.hhaipShell/Data/Library/Application Support/com.hhaip.hhaipShell/vault.enc` |
+| Encrypted config (connections + settings) | `~/Library/Application Support/FastShell/vault.enc` |
 | Master key (mode 0600) | `vault.key` in the same directory |
+
+> Deliberately **outside** the sandbox container: macOS may reset
+> `~/Library/Containers/<bundle-id>/` when the app is reinstalled or its signature changes,
+> which made connection data vanish. To avoid this, the app does **not** enable App Sandbox and
+> stores its data directly under `~/Library/Application Support/FastShell/`.
 
 > Deleting `vault.key` makes existing connection configs undecryptable (the app backs the damaged file up as
 > `vault.enc.corrupt-*` and resets).
@@ -263,7 +285,8 @@ lib/
     ├── sidebar.dart             # Connection list (search / categories / context menu)
     ├── connection_editor.dart   # Connection editor dialog (with category management)
     ├── terminal_panel.dart      # Terminal view + toolbar + function key bar
-    ├── monitor_panel.dart       # Server monitoring + Docker containers + full-screen logs
+    ├── monitor_panel.dart       # Server monitoring + Docker containers + log view (search / colour)
+    ├── log_search.dart          # Log search bar + match highlight overlay
     ├── sftp_panel.dart          # File panel (tree / view / edit / upload / download)
     ├── transfer_bar.dart        # Transfer queue
     ├── settings_dialog.dart     # Settings
@@ -271,7 +294,7 @@ lib/
     ├── theme.dart               # Colours / theme / terminal palette
     └── widgets/common.dart      # Shared widgets and dialogs
 tool/
-├── verify.dart                  # Pure-Dart self-check (84 assertions), CI-friendly
+├── verify.dart                  # Pure-Dart self-check (119 assertions), CI-friendly
 ├── build_release.sh             # Standard release build (strip symbols + inspect bundle)
 ├── publish_github.sh            # Publish to GitHub Releases (push + release + upload asset)
 ├── push_github_api.py           # Mirror git history to GitHub over the REST API (no git push)
@@ -327,7 +350,7 @@ Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 Please make sure these pass before submitting:
 
 ```bash
-dart run tool/verify.dart   # all 84 assertions green
+dart run tool/verify.dart   # all 119 assertions green
 flutter analyze             # no warnings or above
 ```
 

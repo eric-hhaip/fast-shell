@@ -2,25 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
+	<!-- 不启用 App Sandbox，理由见 Release.entitlements -->
 	<key>com.apple.security.cs.allow-jit</key>
-	<true/>
-	<key>com.apple.security.network.server</key>
 	<true/>
 	<!-- SSH / SFTP 需要主动发起出站连接 -->
 	<key>com.apple.security.network.client</key>
 	<true/>
-	<!-- 上传／下载时读写用户通过文件面板选择的文件与目录 -->
-	<key>com.apple.security.files.user-selected.read-write</key>
+	<key>com.apple.security.network.server</key>
 	<true/>
-	<!-- 默认下载位置 -->
-	<key>com.apple.security.files.downloads.read-write</key>
-	<true/>
-	<!-- 直接读取 ~/.ssh 下的私钥，无需每次手动选择 -->
-	<key>com.apple.security.files.home-relative-path.read-only</key>
-	<array>
-		<string>~/.ssh/</string>
-	</array>
 </dict>
 </plist>
