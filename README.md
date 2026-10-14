@@ -294,7 +294,7 @@ lib/
     ├── theme.dart               # Colours / theme / terminal palette
     └── widgets/common.dart      # Shared widgets and dialogs
 tool/
-├── verify.dart                  # Pure-Dart self-check (119 assertions), CI-friendly
+├── verify.dart                  # Pure-Dart self-check (124 assertions), CI-friendly
 ├── build_release.sh             # Standard release build (strip symbols + inspect bundle)
 ├── publish_github.sh            # Publish to GitHub Releases (push + release + upload asset)
 ├── push_github_api.py           # Mirror git history to GitHub over the REST API (no git push)
@@ -350,7 +350,7 @@ Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 Please make sure these pass before submitting:
 
 ```bash
-dart run tool/verify.dart   # all 119 assertions green
+dart run tool/verify.dart   # all 124 assertions green
 flutter analyze             # no warnings or above
 ```
 

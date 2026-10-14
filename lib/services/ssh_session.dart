@@ -529,27 +529,49 @@ class SshSession {
     await part.rename(task.localPath);
   }
 
-  /// 上传本地文件到远端
+  /// 上传本地文件到远端。
+  ///
+  /// 先写入 `<name>.fastshell-part`，全部写完后用 rename 原子替换目标文件
+  /// （OpenSSH 的 posix-rename 扩展支持覆盖已存在目标）：
+  /// 中途失败/取消不会在远端留下半截文件，也不会破坏远端已有的同名文件。
   Future<void> uploadFile(TransferTask task) async {
     final sftp = await _ensureSftp();
     final remotePath = RemotePath.normalize(task.remotePath);
     await mkdirRecursive(RemotePath.parent(remotePath));
 
-    final remote = await sftp.open(
-      remotePath,
-      mode:
-          SftpFileOpenMode.write |
-          SftpFileOpenMode.create |
-          SftpFileOpenMode.truncate,
-    );
+    final partPath = '$remotePath.fastshell-part';
     try {
-      final writer = remote.write(
-        _fileChunks(File(task.localPath), task),
-        onProgress: (bytes) => task.updateProgress(bytes),
+      final remote = await sftp.open(
+        partPath,
+        mode:
+            SftpFileOpenMode.write |
+            SftpFileOpenMode.create |
+            SftpFileOpenMode.truncate,
       );
-      await writer.done;
-    } finally {
-      await remote.close();
+      try {
+        final writer = remote.write(
+          _fileChunks(File(task.localPath), task),
+          onProgress: (bytes) => task.updateProgress(bytes),
+        );
+        await writer.done;
+      } finally {
+        await remote.close();
+      }
+
+      if (task.cancelRequested) {
+        try {
+          await sftp.remove(partPath);
+        } catch (_) {}
+        return;
+      }
+
+      await sftp.rename(partPath, remotePath);
+    } catch (_) {
+      // 失败清理：不在远端留半截临时文件
+      try {
+        await sftp.remove(partPath);
+      } catch (_) {}
+      rethrow;
     }
   }
 

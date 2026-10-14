@@ -133,7 +133,7 @@ flutter pub get
 # 开发运行（热重载）
 flutter run -d macos
 
-# 纯 Dart 逻辑自检（119 项，无需 GUI 环境）
+# 纯 Dart 逻辑自检（124 项，无需 GUI 环境）
 dart run tool/verify.dart
 
 # 静态检查
@@ -318,7 +318,7 @@ tool/
 提交前请确保：
 
 ```bash
-dart run tool/verify.dart   # 119 项自检全绿
+dart run tool/verify.dart   # 124 项自检全绿
 flutter analyze             # 无 warning 及以上
 ```
 

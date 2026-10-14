@@ -5,11 +5,14 @@
 import 'package:hhaip_shell/models/app_settings.dart';
 import 'package:hhaip_shell/models/connection.dart';
 import 'package:hhaip_shell/models/transfer_task.dart';
+import 'package:hhaip_shell/services/error_text.dart';
 import 'package:hhaip_shell/services/log_text.dart';
 import 'package:hhaip_shell/services/monitor_service.dart';
 import 'package:hhaip_shell/services/remote_path.dart';
 import 'package:hhaip_shell/ui/quick_connect.dart';
 import 'package:hhaip_shell/ui/terminal_selection.dart';
+
+import 'package:dartssh2/dartssh2.dart';
 
 int _passed = 0;
 int _failed = 0;
@@ -26,6 +29,33 @@ void check(String label, Object? actual, Object? expected) {
 }
 
 void main() {
+  print('SFTP 错误文案');
+  check(
+    'code 3 带服务器消息',
+    describeError(SftpStatusError(3, 'Permission denied')),
+    '远端权限不足：Permission denied。可用 ls -ld <目录> 查归属，或改传到有写权限的目录',
+  );
+  check(
+    'code 4 提示磁盘与配额',
+    describeError(SftpStatusError(4, 'Disk quota exceeded')),
+    '远端操作失败：Disk quota exceeded。磁盘空间满、配额超限（df -h 查看）也会报这个错',
+  );
+  check(
+    'code 3 无消息时不出冒号',
+    describeError(SftpStatusError(3, '')),
+    '远端权限不足。可用 ls -ld <目录> 查归属，或改传到有写权限的目录',
+  );
+  check(
+    'code 2 文件不存在',
+    describeError(SftpStatusError(2, 'no such file')),
+    '远端文件或目录不存在：no such file',
+  );
+  check(
+    '未知 code 保留原始编号',
+    describeError(SftpStatusError(7, '')),
+    'SFTP 操作失败（code 7）',
+  );
+
   print('RemotePath');
   check(
     'normalize 折叠 . 与 ..',

@@ -1,13 +1,18 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:dartssh2/dartssh2.dart';
 import 'package:path_provider/path_provider.dart';
+
+// 错误翻译逻辑是纯 Dart（供 tool/verify.dart 自检），抽在 error_text.dart；
+// 这里 re-export 保持既有 import 路径可用。
+import 'error_text.dart';
+
+export 'error_text.dart';
 
 /// 本地文件系统辅助：下载目录解析、写入权限探测、在访达中定位。
 ///
-/// macOS 沙盒下，应用只能写入被授权的目录（~/Downloads、用户通过文件面板
-/// 显式选择的文件/目录）。这里集中处理，避免各处重复踩坑。
+/// 去沙盒后（2026-10-13 起）目录写入不再受沙盒限制，但 `file_picker`
+/// 返回的目录仍不保证可写，探测逻辑保留。
 class LocalIo {
   LocalIo._();
 
@@ -87,50 +92,4 @@ class LocalIo {
     if (index <= 0) return '/';
     return path.substring(0, index);
   }
-}
-
-/// 把任意异常翻译成适合直接展示给用户的一句话
-String describeError(Object error) {
-  if (error is StateError) return error.message;
-
-  if (error is FileSystemException) {
-    final reason = error.osError?.message ?? error.message;
-    if (reason.contains('Operation not permitted') ||
-        reason.contains('Permission denied')) {
-      return '本地写入被系统拒绝（$reason），请换一个位置或检查沙盒权限';
-    }
-    if (reason.contains('No such file or directory')) {
-      return '本地路径不存在（$reason）';
-    }
-    if (reason.contains('No space left')) {
-      return '本地磁盘空间不足';
-    }
-    return '本地文件操作失败（$reason）';
-  }
-
-  if (error is SocketException) {
-    return error.osError?.message ?? error.message;
-  }
-
-  if (error is SftpStatusError) {
-    return 'SFTP 操作被拒绝（code ${error.code}）：多为远端权限不足';
-  }
-
-  if (error is SSHAuthFailError || error is SSHAuthAbortError) {
-    return '认证失败：请检查用户名、密码或私钥';
-  }
-
-  if (error is SSHChannelRequestError) {
-    return '远端拒绝了会话请求（${error.message}）';
-  }
-
-  if (error is SSHKeyDecryptError) {
-    return '私钥解密失败：密码短语不正确';
-  }
-
-  if (error is TimeoutException) {
-    return '操作超时，请检查网络';
-  }
-
-  return error.toString().replaceFirst('Exception: ', '');
 }
