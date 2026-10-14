@@ -179,8 +179,38 @@ class AppStore extends ChangeNotifier {
 
   // ------------------------------------------------------------ lifecycle
 
+  /// 单实例锁：进程存活期间持有，退出自动释放。
+  /// 两个实例同时跑会各自读写同一份 vault.enc，后保存的会覆盖先保存的
+  /// （真实事故：Dock 里出现两个图标后，配置被空数据覆盖）。
+  // ignore: unused_field
+  RandomAccessFile? _instanceLock;
+
+  Future<bool> _acquireSingletonLock() async {
+    final dir = _vault?.directory;
+    if (dir == null) return true;
+    try {
+      final raf = await File('${dir.path}/app.lock').open(mode: FileMode.write);
+      // 默认非阻塞：锁被占时抛 FileException，即已有实例在跑
+      await raf.lock(FileLock.exclusive);
+      _instanceLock = raf;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> init() async {
     _vault = await Vault.open();
+
+    // 已有实例在跑（常见于误从 build 目录又开了一份）：直接退出，
+    // 避免两个实例读写同一份配置互踩。
+    if (!await _acquireSingletonLock()) {
+      try {
+        stderr.writeln('[Fast Shell] 已有实例在运行，本次启动退出。');
+      } catch (_) {}
+      exit(0);
+    }
+
     final data = await _vault!.read();
     storageWarning = _vault!.warning;
 
@@ -200,7 +230,25 @@ class AppStore extends ChangeNotifier {
 
   Future<void> _persist() async {
     final vault = _vault;
-    if (vault == null) return;
+
+    // 守卫一：数据还没从磁盘加载完时，内存里的连接列表是空的或不完整的，
+    // 写出去会用半初始化状态覆盖用户的真实配置（真实事故：2026-10-14，
+    // 启动后 5 分钟内一次保存把 1 条连接覆盖成 0 条）。
+    if (vault == null || !ready) return;
+
+    // 守卫二：磁盘上的配置明显有内容、内存里却一条连接都没有时，
+    // 十有八九是状态没加载好或实例互踩，绝不能用空列表覆盖。
+    // 代价：用户真的删光所有连接时这次删除不落盘（重启后连接还在），
+    // 属于「宁可少保存，不可错覆盖」的取舍。
+    try {
+      final existing = vault.vaultFile;
+      if (connections.isEmpty &&
+          existing.existsSync() &&
+          existing.lengthSync() > 512) {
+        return;
+      }
+    } catch (_) {}
+
     await vault.write({
       'version': 1,
       'connections': connections.map((item) => item.toJson()).toList(),
