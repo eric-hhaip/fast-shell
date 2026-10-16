@@ -48,10 +48,36 @@ class MonitorState {
   /// 本次会话已写入的行数（界面显示用）
   int logLineCount = 0;
 
+  /// 日志行缓存（着色后的行、不含换行）：倒序模式与实时/快照切换的数据源。
+  /// 只保留最近 [_logRecentLimit] 行，超出丢最旧。
+  final List<String> _logLines = [];
+  static const _logRecentLimit = 3000;
+
+  /// 倒序浏览（最新在前）：true 时为快照视图——实时日志只入缓存、
+  /// 不再写进终端，屏幕上固定显示「缓存反转后的内容」；
+  /// 切回实时时用缓存正序重写并恢复跟踪。
+  bool logReversed = false;
+
   bool logLoading = false;
   bool logFollowing = false;
   String? logError;
   ExecStreamHandle? _logHandle;
+
+  void _cacheLine(String coloredLine) {
+    _logLines.add(coloredLine);
+    if (_logLines.length > _logRecentLimit) {
+      _logLines.removeRange(0, _logLines.length - _logRecentLimit);
+    }
+  }
+
+  /// 批量缓存（openLogs 一次拿全量日志时用）
+  void _cacheAll(String coloredChunk) {
+    final lines = coloredChunk.split('\r\n');
+    if (lines.isNotEmpty && lines.last.isEmpty) lines.removeLast();
+    for (final line in lines) {
+      _cacheLine(line);
+    }
+  }
 
   Timer? _timer;
   Timer? _dockerTimer;
@@ -226,9 +252,13 @@ class MonitorState {
 
   /// 写入一行日志到终端缓冲（超过 [logScrollback] 行时由 xterm 丢弃最旧的行）。
   /// 写入前按日志级别着色：级别词/时间戳上色，正文保持默认色。
+  /// 倒序快照模式下只入缓存、不写终端——屏幕内容由切换时一次性重写。
   void appendLogLine(String line) {
-    logTerminal.write('${colorizeLogLine(sanitizeLogChunk(line))}\r\n');
+    final colored = colorizeLogLine(sanitizeLogChunk(line));
+    _cacheLine(colored);
     logLineCount++;
+    if (logReversed) return;
+    logTerminal.write('$colored\r\n');
   }
 
   /// 清空终端缓冲
@@ -236,6 +266,20 @@ class MonitorState {
     // CSI 2J 清屏 / CSI 3J 清回滚缓冲
     logTerminal.write('\x1b[H\x1b[2J\x1b[3J');
     logLineCount = 0;
+  }
+
+  /// 切换「最新在前 / 顺序」显示。
+  ///
+  /// 开启：暂停实时追加，把缓存反转后整体重写——顶部即最新；
+  /// 关闭：用缓存正序重写，恢复实时追加与吸底跟踪。
+  /// 快照期间的新日志只进缓存，不会丢失，切回实时时一并出现。
+  void toggleLogOrder() {
+    logReversed = !logReversed;
+    resetLogTerminal();
+    for (final line in (logReversed ? _logLines.reversed : _logLines)) {
+      logTerminal.write('$line\r\n');
+    }
+    logLineCount = _logLines.length;
   }
 
   Future<void> openLogs(
@@ -246,6 +290,7 @@ class MonitorState {
     logContainer = name;
     logLoading = true;
     logError = null;
+    logReversed = false;
     resetLogTerminal();
     onChanged();
     final run = executor;
@@ -264,6 +309,7 @@ class MonitorState {
         // 裸 \n 只换行不回列（行首会阶梯缩进），统一归一成 \r\n；
         // 再按级别着色——逐行做，正文和颜色都不改内容。
         final normalized = colorizeLogChunk(normalizeLogNewlines(text));
+        _cacheAll(normalized);
         logTerminal.write(
           normalized.endsWith('\r\n') ? normalized : '$normalized\r\n',
         );
@@ -321,6 +367,8 @@ class MonitorState {
     logError = null;
     logLoading = false;
     logFollowing = false;
+    logReversed = false;
+    _logLines.clear();
   }
 
   void dispose() {

@@ -111,6 +111,14 @@ class _MonitorPanelState extends State<MonitorPanel> {
           const Spacer(),
           if (showLogs)
             AppIconButton(
+              icon: Icons.swap_vert,
+              tooltip: monitor.logReversed ? '恢复顺序显示' : '最新在前（倒序快照）',
+              active: monitor.logReversed,
+              iconColor: const Color(0xFFE0912F),
+              onPressed: () => store.toggleLogOrder(tab),
+            ),
+          if (showLogs)
+            AppIconButton(
               icon: Icons.search,
               tooltip: '搜索日志（⌘F）',
               iconColor: const Color(0xFF9B6BE0),
@@ -801,7 +809,7 @@ class _MonitorPanelState extends State<MonitorPanel> {
       key: _logViewKey,
       terminal: monitor.logTerminal,
       scrollController: _logScroll,
-      following: monitor.logFollowing,
+      following: monitor.logFollowing && !monitor.logReversed,
       error: monitor.logError,
       fontSize: 11,
     );
@@ -1463,7 +1471,7 @@ class _FullscreenLogViewState extends State<_FullscreenLogView> {
                     _LogTail(
                       terminal: monitor.logTerminal,
                       scrollController: _scroll,
-                      following: monitor.logFollowing,
+                      following: monitor.logFollowing && !monitor.logReversed,
                       builder: (context) => Text(
                         '${monitor.logLineCount} 行'
                         '${monitor.logFollowing ? ' · 实时跟踪中' : ''}',
@@ -1536,7 +1544,7 @@ class _FullscreenLogViewState extends State<_FullscreenLogView> {
                   key: _viewKey,
                   terminal: monitor.logTerminal,
                   scrollController: _scroll,
-                  following: monitor.logFollowing,
+                  following: monitor.logFollowing && !monitor.logReversed,
                   fontSize: 11.5,
                   padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
                 ),

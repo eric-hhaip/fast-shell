@@ -356,6 +356,12 @@ class _SelectionAutoScrollState extends State<_SelectionAutoScroll> {
   /// 滚动步长和选区换算都用同一个值，天然自洽，也免去每次移动都量一遍排版。
   Size? _dragCellSize;
 
+  /// 拖拽起点的绝对单元格坐标（buffer 行号），按下那一刻定格。
+  /// 之后无论自动滚动把视口推到哪里，重算选区都以它为锚——
+  /// 否则起点会用「固定视口坐标 + 当下 scrollOffset」重新换算，跟着滚动漂移，
+  /// 往下拖时上半段选区就会消失（真实事故：2026-10-16 用户报告）。
+  CellOffset? _dragStartOffset;
+
   /// 亚行精度的滚动累积器，低速时也能保证最终滚够整数行
   double _carry = 0;
 
@@ -386,6 +392,9 @@ class _SelectionAutoScrollState extends State<_SelectionAutoScroll> {
     _pointer = event.localPosition;
     _dragCellSize = null;
     _carry = 0;
+    // 起点立刻换算成 buffer 绝对坐标并定格（依赖按下时的 scrollOffset）
+    _dragCellSize = _cellSize();
+    _dragStartOffset = _absoluteOffset(event.localPosition, _dragCellSize!);
     _update();
   }
 
@@ -400,6 +409,7 @@ class _SelectionAutoScrollState extends State<_SelectionAutoScroll> {
     _dragStart = null;
     _pointer = null;
     _dragCellSize = null;
+    _dragStartOffset = null;
     _stop();
   }
 
@@ -488,22 +498,38 @@ class _SelectionAutoScrollState extends State<_SelectionAutoScroll> {
     );
   }
 
-  /// 按当前滚动位置重算选区 —— 与 `RenderTerminal.selectCharacters` 同一套逻辑
-  void _reapplySelection(Size cell) {
-    final start = _dragStart;
-    final pointer = _pointer;
-    if (start == null || pointer == null) return;
-
-    // xterm 内部换算用的是「绘制区坐标」，要扣掉外层 padding；
-    // 它自己的 _padding 是安全区，桌面端为 0，这里照抄保持一致
+  /// 视口局部坐标 → buffer 绝对单元格坐标。
+  /// 换算依赖取点当下的 scrollOffset，所以只在取点那一刻调用、
+  /// 结果存住复用，不要在滚动之后再用旧坐标重复换算。
+  CellOffset _absoluteOffset(Offset local, Size cell) {
     final safeArea = MediaQuery.of(context).padding;
-    final fromColumn = selectionColumnFor(
-      localX: start.dx,
-      cellWidth: cell.width,
-      paddingLeft: widget.padding.left,
-      safeAreaLeft: safeArea.left,
-      viewColumns: widget.terminal.viewWidth,
+    return CellOffset(
+      selectionColumnFor(
+        localX: local.dx,
+        cellWidth: cell.width,
+        paddingLeft: widget.padding.left,
+        safeAreaLeft: safeArea.left,
+        viewColumns: widget.terminal.viewWidth,
+      ),
+      selectionRowFor(
+        localY: local.dy,
+        cellHeight: cell.height,
+        paddingTop: widget.padding.top,
+        safeAreaTop: safeArea.top,
+        scrollOffset: _scrollOffset(),
+        bufferLines: widget.terminal.buffer.height,
+      ),
     );
+  }
+
+  /// 按当前滚动位置重算选区：起点用按下时定格的绝对坐标（`_dragStartOffset`），
+  /// 终点用当前指针位置实时换算——自动滚动只允许影响终点。
+  void _reapplySelection(Size cell) {
+    final startOffset = _dragStartOffset;
+    final pointer = _pointer;
+    if (startOffset == null || pointer == null) return;
+
+    final safeArea = MediaQuery.of(context).padding;
     final toColumn = selectionColumnFor(
       localX: pointer.dx,
       cellWidth: cell.width,
@@ -511,40 +537,24 @@ class _SelectionAutoScrollState extends State<_SelectionAutoScroll> {
       safeAreaLeft: safeArea.left,
       viewColumns: widget.terminal.viewWidth,
     );
-
-    final buffer = widget.terminal.buffer;
-    final from = CellOffset(
-      fromColumn,
-      selectionRowFor(
-        localY: start.dy,
-        cellHeight: cell.height,
-        paddingTop: widget.padding.top,
-        safeAreaTop: safeArea.top,
-        scrollOffset: _scrollOffset(),
-        bufferLines: buffer.height,
-      ),
-    );
-    var to = CellOffset(
-      toColumn,
-      selectionRowFor(
-        localY: pointer.dy,
-        cellHeight: cell.height,
-        paddingTop: widget.padding.top,
-        safeAreaTop: safeArea.top,
-        scrollOffset: _scrollOffset(),
-        bufferLines: buffer.height,
-      ),
+    final toRow = selectionRowFor(
+      localY: pointer.dy,
+      cellHeight: cell.height,
+      paddingTop: widget.padding.top,
+      safeAreaTop: safeArea.top,
+      scrollOffset: _scrollOffset(),
+      bufferLines: widget.terminal.buffer.height,
     );
 
     // 与 xterm 一致：向右拖时多含一个单元格
-    to = CellOffset(
-      selectionExtentColumn(fromColumn: from.x, toColumn: to.x),
-      to.y,
+    final to = CellOffset(
+      selectionExtentColumn(fromColumn: startOffset.x, toColumn: toColumn),
+      toRow,
     );
 
     widget.controller.setSelection(
-      buffer.createAnchorFromOffset(from),
-      buffer.createAnchorFromOffset(to),
+      widget.terminal.buffer.createAnchorFromOffset(startOffset),
+      widget.terminal.buffer.createAnchorFromOffset(to),
     );
   }
 

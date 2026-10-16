@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
@@ -1339,6 +1340,13 @@ class _FileTextBody extends StatefulWidget {
 class _FileTextBodyState extends State<_FileTextBody> {
   List<String> _lines = const [];
 
+  /// 拿到 SelectionArea 的状态，供「全选复制」一键操作。
+  final GlobalKey<SelectableRegionState> _selectionKey =
+      GlobalKey<SelectableRegionState>();
+
+  /// 选区内容随 onSelectionChanged 实时更新；全选后从这里取全文。
+  SelectedContent? _selectedContent;
+
   @override
   void initState() {
     super.initState();
@@ -1353,6 +1361,27 @@ class _FileTextBodyState extends State<_FileTextBody> {
     }
   }
 
+  /// 全选 + 复制，一键完成。
+  ///
+  /// 不让用户拖着选的原因：正文按行虚拟化渲染，滚出视口的行会被销毁，
+  /// SelectionArea 对已回收行的选区不保留——长文件拖选必然「选着选着
+  /// 上面就没了」。一键全选绕开这条路径。
+  void _selectAllAndCopy() {
+    final region = _selectionKey.currentState;
+    if (region == null) return;
+    // selectAll 会在同步链路里回调 onSelectionChanged，随后即可取全文
+    region.selectAll(SelectionChangedCause.keyboard);
+    final text = _selectedContent?.plainText ?? '';
+    if (text.isEmpty) return;
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('已复制全部内容（${_lines.length} 行）'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   static List<String> _splitLines(String content) {
     final lines = content.split('\n');
     // 末尾换行会多出一个空串，去掉它避免行尾空一行
@@ -1363,19 +1392,53 @@ class _FileTextBodyState extends State<_FileTextBody> {
   @override
   Widget build(BuildContext context) {
     return SelectionArea(
-      child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
-        itemCount: _lines.length,
-        itemBuilder: (context, index) {
-          return Text(
-            _lines[index],
-            style: AppText.mono.copyWith(
-              fontSize: 12.3,
-              height: 1.5,
-              color: AppColors.textPrimary,
+      key: _selectionKey,
+      onSelectionChanged: (content) => _selectedContent = content,
+      child: Column(
+        children: [
+          // 工具行：一键全选复制。拖选在可视范围内可用，但跨屏选择受
+          // 虚拟化限制（行被回收后选区丢失），所以这里提供一键操作。
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+            alignment: Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextButton.icon(
+                  onPressed: _selectAllAndCopy,
+                  icon: const Icon(Icons.copy_all_outlined, size: 15),
+                  label: const Text('全选复制', style: TextStyle(fontSize: 12)),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF2F6BFF),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 28),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${_lines.length} 行 · 跨屏拖选会丢失已滚出视口的部分，长文件建议用此按钮',
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF8A93A6)),
+                ),
+              ],
             ),
-          );
-        },
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
+              itemCount: _lines.length,
+              itemBuilder: (context, index) {
+                return Text(
+                  _lines[index],
+                  style: AppText.mono.copyWith(
+                    fontSize: 12.3,
+                    height: 1.5,
+                    color: AppColors.textPrimary,
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

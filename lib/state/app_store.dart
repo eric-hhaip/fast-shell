@@ -537,6 +537,18 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 切换容器日志「最新在前 / 顺序显示」。
+  /// 切换本身重写终端缓冲（由 xterm 重绘），这里只需通知一次更新按钮态；
+  /// 倒序下吸底跟随没有意义，顺手关掉跟踪流。
+  void toggleLogOrder(TerminalTab tab) {
+    final monitor = tab.monitor;
+    monitor.toggleLogOrder();
+    if (monitor.logReversed && monitor.logFollowing) {
+      unawaited(monitor.stopFollow());
+    }
+    notifyListeners();
+  }
+
   Future<void> disconnectTab(TerminalTab tab) async {
     await tab.session.disconnect();
     notifyListeners();

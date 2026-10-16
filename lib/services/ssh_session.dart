@@ -141,13 +141,13 @@ class SshSession {
         shell.stdout
             .cast<List<int>>()
             .transform(const Utf8Decoder(allowMalformed: true))
-            .listen(onOutput),
+            .listen(_onRemoteOutput),
       );
       _subscriptions.add(
         shell.stderr
             .cast<List<int>>()
             .transform(const Utf8Decoder(allowMalformed: true))
-            .listen(onOutput),
+            .listen(_onRemoteOutput),
       );
       unawaited(
         shell.done.then((_) {
@@ -592,8 +592,36 @@ class SshSession {
 
   // ------------------------------------------------------------- internals
 
+  /// 是否已就 ZMODEM 提示过一次（每次会话最多提示一次，避免刷屏）
+  bool _zmodemNotified = false;
+
+  /// ZMODEM 启动序列的关键特征：rz/sz 一启动就发 `**\x18B00…`
+  static const String _zmodemSignature = '\x18B00';
+
+  /// 远端输出统一入口：透传给 UI，并顺路检测 rz/sz。
+  ///
+  /// xterm 终端不支持 ZMODEM 协议，rz 的握手序列会以乱码形式留在屏幕上
+  /// （`waiting to receive.*xB01000000…`）。与其让用户对着一屏乱码，
+  /// 不如当场说明并指路 SFTP 面板——那里有拖拽、进度与断点重试。
+  void _onRemoteOutput(String data) {
+    if (!_zmodemNotified && data.contains(_zmodemSignature)) {
+      _zmodemNotified = true;
+      onOutput?.call(data);
+      onOutput?.call(
+        '\r\n\x1b[33m'
+        '[Fast Shell] 检测到 rz（ZMODEM）：终端不支持该协议，无法完成传输。\r\n'
+        '  按 Ctrl+X 取消 rz，然后用 SFTP 面板上传（支持拖拽、进度与失败重试）。\r\n'
+        '\x1b[0m\r\n',
+      );
+      return;
+    }
+    onOutput?.call(data);
+  }
+
   /// 连接成功后注入远端 shell 的一次性美化命令（不回显、执行完自动清屏）：
   /// - 彩色 PS1：绿色 user@host + 蓝色路径（仅 bash 生效，sh 下跳过）
+  /// - PS1 以 `\n` 开头：cat 无换行结尾的文件时，输出与提示符分两行，
+  ///   提示符永远从行首开始（代价是正常输出后多一个空行，P10k 同款观感）
   /// - ls / grep / egrep 自动着色
   /// - stty -echo / echo 包裹，避免命令文本出现在终端里
   static const String _shellInitCommand =
@@ -602,7 +630,7 @@ class SshSession {
       "alias grep='grep --color=auto' 2>/dev/null; "
       "alias egrep='egrep --color=auto' 2>/dev/null; "
       "if [ -n \"\$BASH_VERSION\" ]; then "
-      "PS1='\\[\\033[01;32m\\]\\u@\\h\\[\\033[0m\\]:\\[\\033[01;34m\\]\\w\\[\\033[0m\\]\\\$ '; "
+      "PS1='\\n\\[\\033[01;32m\\]\\u@\\h\\[\\033[0m\\]:\\[\\033[01;34m\\]\\w\\[\\033[0m\\]\\\$ '; "
       "export PS1; fi; "
       "stty echo 2>/dev/null; clear\n";
 
